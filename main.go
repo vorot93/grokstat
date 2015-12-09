@@ -4,11 +4,21 @@ import (
         "bufio"
         "bytes"
         "encoding/json"
+        "errors"
         "flag"
         "fmt"
         "net"
         "time"
         )
+
+type Game struct {
+    Id string
+    Name string
+    MasterRequest string
+    MasterParseFunc func([]byte, []byte)([]string, error)
+    MasterResponse string
+    ProtocolVer string
+}
 
 func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
     raddr, _ := net.ResolveUDPAddr("udp", addr)
@@ -36,7 +46,7 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
         status = []byte(buf)
     } else if protocol == "udp" {
         buf := make([]byte, 1024)
-        conn.SetDeadline(time.Now().Add(time.Duration(10)*time.Second))
+        conn.SetDeadline(time.Now().Add(time.Duration(5)*time.Second))
         conn.ReadFromUDP(buf)
         if err != nil {
             return []byte{}, err
@@ -48,14 +58,16 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 }
 
 // \xFF\xFF\xFF\xFFgetserversResponse\\[...]\\EOT\0\0\0
-func parse_quake3_master_response(response []byte) []string {
+func parseQuake3MasterResponse(response []byte, request []byte) ([]string, error) {
     var servers []string
 
-    prelude := []byte{0xff, 0xff, 0xff, 0xff}
-    rs := []byte("getserversResponse")
+    parseErr := errors.New("Error parsing the response")
+
     splitter := []byte{0x5c}
 
-    response_body := response[len(prelude) + len(rs):]
+    if bytes.Equal(response[:len(request)], request) != true {return []string{}, parseErr}
+
+    response_body := response[len(request):]
     response_split := bytes.Split(response_body, splitter)
     for _, entry_raw := range response_split {
         if len(entry_raw) == 6 {
@@ -72,7 +84,7 @@ func parse_quake3_master_response(response []byte) []string {
             servers = append(servers, server_entry)
         }
     }
-    return servers
+    return servers, nil
 }
 
 func main() {
@@ -82,15 +94,22 @@ func main() {
 
     if master_ip == "" {fmt.Println("Please specify valid IP");return}
 
-    rs := `getservers`
-    protocol := `68`
-    filter := `empty full`
-    request := []byte(string([]byte{0xff, 0xff, 0xff, 0xff}) + rs + ` ` + protocol + ` ` + filter + "\n")
-    response, _ := connect_send_receive("udp", master_ip, request)
+    game := Game{Id: "quake3", Name: "Quake III Arena", MasterRequest: "\xFF\xFF\xFF\xFFgetservers 68 empty full\n", MasterParseFunc: parseQuake3MasterResponse, MasterResponse: "\xFF\xFF\xFF\xFFgetserversResponse", ProtocolVer: "68"}
 
-    servers := parse_quake3_master_response(response)
+    response, _ := connect_send_receive("udp", master_ip, []byte(game.MasterRequest))
+
+    servers, masterParseErr := game.MasterParseFunc([]byte(response), []byte(game.MasterResponse))
+
     result := make(map[string]interface{})
-    result["servers"] = servers
+    if masterParseErr != nil {
+        result["servers"] = []string{}
+        result["status"] = "500"
+        result["message"] = masterParseErr.Error()
+    } else {
+        result["servers"] = servers
+        result["status"] = "200"
+        result["message"] = "OK"
+    }
 
     json_out, _ := json.Marshal(result)
     fmt.Println(string(json_out))
