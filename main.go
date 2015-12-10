@@ -1,3 +1,12 @@
+/*
+grokstat is a tool for querying game servers for various information: server list, player count, active map etc
+
+Usage of grokstat utility:
+	-ip string
+		IP address of server to query.
+	-protocol string
+		Server protocol to use.
+*/
 package main
 
 import (
@@ -13,6 +22,7 @@ import (
 	"time"
 )
 
+// Server query protocol entry defining grokstat's behavior
 type ProtocolEntry struct {
 	Id                string
 	Name              string
@@ -23,6 +33,7 @@ type ProtocolEntry struct {
 	DefaultMasterPort string
 }
 
+// Construct a new protocol entry and return it to user
 func NewProtocolEntry(protocolId string, name string, masterRequestTemplate string, masterParseFunc func([]byte, []byte) ([]string, error), masterResponse string, protocolVer string, defaultMasterPort string) ProtocolEntry {
 	entry := ProtocolEntry{Id: protocolId, Name: name, MasterParseFunc: masterParseFunc, MasterResponse: masterResponse, ProtocolVer: protocolVer, DefaultMasterPort: defaultMasterPort}
 
@@ -38,6 +49,7 @@ func NewProtocolEntry(protocolId string, name string, masterRequestTemplate stri
 	return entry
 }
 
+// A convenience function for creating UDP connections
 func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
 	raddr, _ := net.ResolveUDPAddr("udp", addr)
 	caddr, _ := net.ResolveUDPAddr("udp", ":0")
@@ -48,6 +60,7 @@ func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
 	return conn, nil
 }
 
+// A convenience function for creating TCP connections
 func newTCPConnection(addr string, protocol string) (*net.TCPConn, error) {
 	raddr, _ := net.ResolveTCPAddr("tcp", addr)
 	caddr, _ := net.ResolveTCPAddr("tcp", ":0")
@@ -95,7 +108,7 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 	return status, err
 }
 
-// Parses the response from Quake III Arena master server. The format is: "\xFF\xFF\xFF\xFFgetserversResponse\\abcdpp\\abcdpp\\...\\EOT\0\0\0"
+// Parses the response from Quake III Arena master server.
 func parseQuake3MasterResponse(response []byte, request []byte) ([]string, error) {
 	var servers []string
 
@@ -149,6 +162,7 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
+// Forms a JSON string out of server list.
 func FormJsonString(servers []string, err error) (string, error) {
 	result := make(map[string]interface{})
 	if err != nil {
