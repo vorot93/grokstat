@@ -13,7 +13,7 @@ import (
         "time"
         )
 
-type GameEntry struct {
+type ProtocolEntry struct {
     Id string
     Name string
     MasterRequest string
@@ -23,8 +23,8 @@ type GameEntry struct {
     DefaultMasterPort string
 }
 
-func NewGameEntry(gameId string, name string, masterRequestTemplate string, masterParseFunc func([]byte, []byte)([]string, error), masterResponse string, protocolVer string, defaultMasterPort string) GameEntry {
-    entry := GameEntry {Id:gameId, Name:name, MasterParseFunc:masterParseFunc, MasterResponse:masterResponse, ProtocolVer:protocolVer, DefaultMasterPort:defaultMasterPort}
+func NewProtocolEntry(protocolId string, name string, masterRequestTemplate string, masterParseFunc func([]byte, []byte)([]string, error), masterResponse string, protocolVer string, defaultMasterPort string) ProtocolEntry {
+    entry := ProtocolEntry {Id:protocolId, Name:name, MasterParseFunc:masterParseFunc, MasterResponse:masterResponse, ProtocolVer:protocolVer, DefaultMasterPort:defaultMasterPort}
 
     var buf = new(bytes.Buffer)
 
@@ -141,7 +141,7 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
     urlInfo, _ := url.Parse(ipString)
 
     result := make(map[string]string)
-    result["protocol"] = ParseScheme(urlInfo.Scheme)
+    result["http_protocol"] = ParseScheme(urlInfo.Scheme)
     result["host"] = urlInfo.Host
 
     return result
@@ -169,40 +169,39 @@ if err != nil {
 }
 
 func main() {
-    var gameFlag string
+    var protocolFlag string
     var master_ip string
     flag.StringVar(&master_ip, "ip", "", "IP address of server to query.")
-    flag.StringVar(&gameFlag, "game", "", "Game to query.")
+    flag.StringVar(&protocolFlag, "protocol", "", "Server protocol to use.")
     flag.Parse()
 
     var resultErr error
 
     if master_ip == "" {resultErr = errors.New("Please specify a valid IP.")}
-    if gameFlag == "" {resultErr = errors.New("Please specify the game.")}
+    if protocolFlag == "" {resultErr = errors.New("Please specify the protocol.")}
 
-    gameCmdMap := make(map[string]GameEntry)
-    gameCmdMap["q3a"] = NewGameEntry("quake3", "Quake III Arena", "\xFF\xFF\xFF\xFFgetservers {{.ProtocolVer}} empty full\n", parseQuake3MasterResponse, "\xFF\xFF\xFF\xFFgetserversResponse", "68", "27950")
+    protocolCmdMap := make(map[string]ProtocolEntry)
+    protocolCmdMap["q3m"] = NewProtocolEntry("quake3master", "Quake III Arena Master", "\xFF\xFF\xFF\xFFgetservers {{.ProtocolVer}} empty full\n", parseQuake3MasterResponse, "\xFF\xFF\xFF\xFFgetserversResponse", "68", "27950")
 
-    var game GameEntry
+    var protocol ProtocolEntry
     if resultErr == nil {
         var g_ok bool
-        game, g_ok = gameCmdMap[gameFlag]
-        if g_ok == false {resultErr = errors.New("Invalid game specified.")}
+        protocol, g_ok = protocolCmdMap[protocolFlag]
+        if g_ok == false {resultErr = errors.New("Invalid protocol specified.")}
     }
-
 
     var response []byte
     if resultErr == nil {
         var responseErr error
-        ipMap := ParseIPAddr(master_ip, game.DefaultMasterPort)
-        response, responseErr = connect_send_receive(ipMap["protocol"], ipMap["host"], []byte(game.MasterRequest))
+        ipMap := ParseIPAddr(master_ip, protocol.DefaultMasterPort)
+        response, responseErr = connect_send_receive(ipMap["http_protocol"], ipMap["host"], []byte(protocol.MasterRequest))
         resultErr = responseErr
     }
 
     var servers []string
     if resultErr == nil {
         var masterParseErr error
-        servers, masterParseErr = game.MasterParseFunc([]byte(response), []byte(game.MasterResponse))
+        servers, masterParseErr = protocol.MasterParseFunc([]byte(response), []byte(protocol.MasterResponse))
         resultErr = masterParseErr
     }
 
