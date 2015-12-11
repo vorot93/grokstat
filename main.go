@@ -1,6 +1,8 @@
 /*
 grokstat is a tool for querying game servers for various information: server list, player count, active map etc
 
+The program takes protocol name and remote ip address as arguments, fetches information from the remote server, parses it and outputs back as JSON. As convenience the status and message are also provided.
+
 Usage of grokstat utility:
 	-ip string
 		IP address of server to query.
@@ -24,27 +26,27 @@ import (
 
 // Server query protocol entry defining grokstat's behavior
 type ProtocolEntry struct {
-	Id                string
-	Name              string
-	MasterRequest     string
-	MasterParseFunc   func([]byte, []byte) ([]string, error)
-	MasterResponse    string
-	ProtocolVer       string
-	DefaultMasterPort string
+	Id                 string
+	Name               string
+	RequestPrelude     string
+	ResponseParseFunc  func([]byte, []byte) ([]string, error)
+	ResponsePrelude    string
+	Version            string
+	DefaultRequestPort string
 }
 
 // Construct a new protocol entry and return it to user
-func NewProtocolEntry(protocolId string, name string, masterRequestTemplate string, masterParseFunc func([]byte, []byte) ([]string, error), masterResponse string, protocolVer string, defaultMasterPort string) ProtocolEntry {
-	entry := ProtocolEntry{Id: protocolId, Name: name, MasterParseFunc: masterParseFunc, MasterResponse: masterResponse, ProtocolVer: protocolVer, DefaultMasterPort: defaultMasterPort}
+func NewProtocolEntry(protocolId string, name string, requestTemplate string, responseParseFunc func([]byte, []byte) ([]string, error), responsePrelude string, version string, defaultRequestPort string) ProtocolEntry {
+	entry := ProtocolEntry{Id: protocolId, Name: name, ResponseParseFunc: responseParseFunc, ResponsePrelude: responsePrelude, Version: version, DefaultRequestPort: defaultRequestPort}
 
 	var buf = new(bytes.Buffer)
 
-	t, _ := template.New("Request template").Parse(masterRequestTemplate)
+	t, _ := template.New("Request template").Parse(requestTemplate)
 	t.Execute(buf, entry)
 
-	masterRequestString := buf.String()
+	RequestString := buf.String()
 
-	entry.MasterRequest = masterRequestString
+	entry.RequestPrelude = RequestString
 
 	return entry
 }
@@ -167,11 +169,11 @@ func FormJsonString(servers []string, err error) (string, error) {
 	result := make(map[string]interface{})
 	if err != nil {
 		result["servers"] = []string{}
-		result["status"] = "500"
+		result["status"] = 500
 		result["message"] = err.Error()
 	} else {
 		result["servers"] = servers
-		result["status"] = "200"
+		result["status"] = 200
 		result["message"] = "OK"
 	}
 
@@ -186,14 +188,14 @@ func FormJsonString(servers []string, err error) (string, error) {
 
 func main() {
 	var protocolFlag string
-	var master_ip string
-	flag.StringVar(&master_ip, "ip", "", "IP address of server to query.")
+	var remoteIp string
+	flag.StringVar(&remoteIp, "ip", "", "IP address of server to query.")
 	flag.StringVar(&protocolFlag, "protocol", "", "Server protocol to use.")
 	flag.Parse()
 
 	var resultErr error
 
-	if master_ip == "" {
+	if remoteIp == "" {
 		resultErr = errors.New("Please specify a valid IP.")
 	}
 	if protocolFlag == "" {
@@ -201,7 +203,7 @@ func main() {
 	}
 
 	protocolCmdMap := make(map[string]ProtocolEntry)
-	protocolCmdMap["q3m"] = NewProtocolEntry("quake3master", "Quake III Arena Master", "\xFF\xFF\xFF\xFFgetservers {{.ProtocolVer}} empty full\n", parseQuake3MasterResponse, "\xFF\xFF\xFF\xFFgetserversResponse", "68", "27950")
+	protocolCmdMap["q3m"] = NewProtocolEntry("quake3master", "Quake III Arena Master", "\xFF\xFF\xFF\xFFgetservers {{.Version}} empty full\n", parseQuake3MasterResponse, "\xFF\xFF\xFF\xFFgetserversResponse", "68", "27950")
 
 	var protocol ProtocolEntry
 	if resultErr == nil {
@@ -215,16 +217,16 @@ func main() {
 	var response []byte
 	if resultErr == nil {
 		var responseErr error
-		ipMap := ParseIPAddr(master_ip, protocol.DefaultMasterPort)
-		response, responseErr = connect_send_receive(ipMap["http_protocol"], ipMap["host"], []byte(protocol.MasterRequest))
+		ipMap := ParseIPAddr(remoteIp, protocol.DefaultRequestPort)
+		response, responseErr = connect_send_receive(ipMap["http_protocol"], ipMap["host"], []byte(protocol.RequestPrelude))
 		resultErr = responseErr
 	}
 
 	var servers []string
 	if resultErr == nil {
-		var masterParseErr error
-		servers, masterParseErr = protocol.MasterParseFunc([]byte(response), []byte(protocol.MasterResponse))
-		resultErr = masterParseErr
+		var responseParseErr error
+		servers, responseParseErr = protocol.ResponseParseFunc([]byte(response), []byte(protocol.ResponsePrelude))
+		resultErr = responseParseErr
 	}
 
 	jsonOut, _ := FormJsonString(servers, resultErr)
