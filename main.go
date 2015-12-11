@@ -114,12 +114,10 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 func parseQuake3MasterResponse(response []byte, request []byte) ([]string, error) {
 	var servers []string
 
-	parseErr := errors.New("Error parsing the response")
-
 	splitter := []byte{0x5c}
 
 	if bytes.Equal(response[:len(request)], request) != true {
-		return []string{}, parseErr
+		return []string{}, errors.New("Invalid response prelude.")
 	}
 
 	response_body := response[len(request):]
