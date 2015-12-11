@@ -51,5 +51,12 @@ func MakeProtocolMap() map[string]ProtocolEntry {
 	q3m_protocol := q3m_template
 	protocolMap["q3m"] = NewProtocolEntry(ProtocolEntryInfo(q3m_protocol))
 
+	xonoticm_protocol := q3m_template
+	xonoticm_protocol.Id = "xonoticm"
+	xonoticm_protocol.Name = "Xonotic Master"
+	xonoticm_protocol.RequestPreludeTemplate = "\377\377\377\377getservers Xonotic {{.Version}} empty full"
+	xonoticm_protocol.Version = "3"
+	protocolMap["xonoticm"] = NewProtocolEntry(ProtocolEntryInfo(xonoticm_protocol))
+
 	return protocolMap
 }
