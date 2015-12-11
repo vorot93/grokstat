@@ -10,6 +10,7 @@ import (
 type ProtocolEntryInfo struct {
 	Id                      string                                 `json:"id"`
 	Name                    string                                 `json:"name"`
+	HttpProtocol            string                                 `json:"http_protocol"`
 	RequestPreludeTemplate  string                                 `json:"request_prelude_template"`
 	ResponseType            string                                 `json:"response_type"`
 	ResponseParseFunc       func([]byte, []byte) ([]string, error) `json:"-"`
@@ -44,7 +45,7 @@ func NewProtocolEntry(entry_info ProtocolEntryInfo) ProtocolEntry {
 
 // Returns a map with protocols initialized
 func MakeProtocolMap() map[string]ProtocolEntry {
-	q3m_template := ProtocolEntryInfo{Id: "q3m", Name: "Quake III Arena Master", RequestPreludeTemplate: "\xFF\xFF\xFF\xFFgetservers {{.Version}} empty full\n", ResponseType: "Server list", ResponseParseFunc: q3m.ParseMasterResponse, ResponsePreludeTemplate: "\xFF\xFF\xFF\xFFgetserversResponse", Version: "68", DefaultRequestPort: "27950"}
+	q3m_template := ProtocolEntryInfo{Id: "q3m", Name: "Quake III Arena Master", HttpProtocol: "UDP", RequestPreludeTemplate: "\xFF\xFF\xFF\xFFgetservers {{.Version}} empty full\n", ResponseType: "Server list", ResponseParseFunc: q3m.ParseMasterResponse, ResponsePreludeTemplate: "\xFF\xFF\xFF\xFFgetserversResponse", Version: "68", DefaultRequestPort: "27950"}
 
 	protocolMap := make(map[string]ProtocolEntry)
 
