@@ -78,7 +78,7 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 		}
 		defer conn.Close()
 		conn.Write(request)
-		buf_len := 65535
+		buf_len := 16777215
 		buf := make([]byte, buf_len)
 		conn.SetDeadline(time.Now().Add(time.Duration(5) * time.Second))
 		conn.ReadFromUDP(buf)
