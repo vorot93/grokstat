@@ -6,8 +6,12 @@ The program takes protocol name and remote ip address as arguments, fetches info
 Usage of grokstat utility:
 	-ip string
 		IP address of server to query.
+	-json-input
+		Read JSON from standard input instead of flags
 	-protocol string
 		Server protocol to use.
+	-show-protocols
+		Output available server protocols.
 */
 package main
 
@@ -160,7 +164,7 @@ func main() {
 	flag.BoolVar(&jsonInput, "json-input", jsonInputDefault, "Read flags as JSON from standard input.")
 	flag.StringVar(&remoteIp, "ip", remoteIpDefault, "IP address of server to query.")
 	flag.StringVar(&selectedProtocol, "protocol", selectedProtocolDefault, "Server protocol to use.")
-	flag.BoolVar(&showProtocols, "showProtocols", showProtocolsDefault, "Output available server protocols.")
+	flag.BoolVar(&showProtocols, "show-protocols", showProtocolsDefault, "Output available server protocols.")
 	flag.Parse()
 
 	var resultErr error
