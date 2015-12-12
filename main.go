@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/grokstat/grokstat/protocols"
@@ -57,13 +58,13 @@ func newTCPConnection(addr string, protocol string) (*net.TCPConn, error) {
 	return conn, nil
 }
 
-func connect_send_receive(protocol string, addr string, request []byte) ([]byte, error) {
+func connect_send_receive(httpProtocol string, addr string, request []byte) ([]byte, error) {
 	var status []byte
 	var err error
 	emptyResponse := errors.New("No response from server")
 
-	if protocol == "tcp" {
-		conn, connection_err := newTCPConnection(addr, protocol)
+	if httpProtocol == "tcp" {
+		conn, connection_err := newTCPConnection(addr, httpProtocol)
 		if connection_err != nil {
 			return []byte{}, connection_err
 		}
@@ -71,8 +72,8 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 		var buf string
 		buf, err = bufio.NewReader(conn).ReadString('\n')
 		status = []byte(buf)
-	} else if protocol == "udp" {
-		conn, connection_err := newUDPConnection(addr, protocol)
+	} else if httpProtocol == "udp" {
+		conn, connection_err := newUDPConnection(addr, httpProtocol)
 		if connection_err != nil {
 			return []byte{}, connection_err
 		}
@@ -94,24 +95,24 @@ func connect_send_receive(protocol string, addr string, request []byte) ([]byte,
 	return status, err
 }
 
-func ParseScheme(protocol_string string) string {
-	var protocol string
+func ParseIPAddr(ipString string, defaultPort string) map[string]string {
+	var ipStringMod string
 
-	if protocol_string == "udp" {
-		protocol = "udp"
+	if len(strings.Split(ipString, "://")) == 1 {
+		ipStringMod = "placeholder://" + ipString
 	} else {
-		protocol = "tcp"
+		ipStringMod = ipString
 	}
 
-	return protocol
-}
-
-func ParseIPAddr(ipString string, defaultPort string) map[string]string {
-	urlInfo, _ := url.Parse(ipString)
+	urlInfo, _ := url.Parse(ipStringMod)
 
 	result := make(map[string]string)
-	result["http_protocol"] = ParseScheme(urlInfo.Scheme)
+	result["http_protocol"] = urlInfo.Scheme
 	result["host"] = urlInfo.Host
+
+	if len(strings.Split(result["host"], ":")) == 1 {
+		result["host"] = result["host"] + ":" + defaultPort
+	}
 
 	return result
 }
@@ -176,14 +177,11 @@ func main() {
 		selectedProtocol = selectedProtocolDefault
 		showProtocols = showProtocolsDefault
 
-		//jsonFlagsParseErr := errors.New("Error parsing flags from standard input")
-
 		reader := bufio.NewReader(os.Stdin)
 		text, _ := reader.ReadString('\n')
 
 		jsonFlags := jsonInputFlags{Ip: remoteIpDefault, Protocol: selectedProtocolDefault}
 		_ = json.Unmarshal([]byte(text), &jsonFlags)
-		//if jsonErr != nil {FormJsonString("", nil, jsonFlagsParseErr); FormJsonString("", nil, jsonErr); return}
 
 		remoteIp = jsonFlags.Ip
 		selectedProtocol = jsonFlags.Protocol
@@ -214,7 +212,8 @@ func main() {
 	if resultErr == nil {
 		var responseErr error
 		ipMap := ParseIPAddr(remoteIp, protocol.Information.DefaultRequestPort)
-		response, responseErr = connect_send_receive(ipMap["http_protocol"], ipMap["host"], []byte(protocol.RequestPrelude))
+		hostname := ipMap["host"]
+		response, responseErr = connect_send_receive(protocol.Information.HttpProtocol, hostname, []byte(protocol.RequestPrelude))
 		resultErr = responseErr
 	}
 
