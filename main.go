@@ -117,15 +117,15 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-// Forms a JSON string out of server list.
-func FormJsonString(output_field string, output interface{}, err error) (string, error) {
+// Forms a JSON string out of Grokstat output.
+func FormJsonString(output interface{}, err error) (string, error) {
 	result := make(map[string]interface{})
 	if err != nil {
-		result["servers"] = []string{}
+		result["output"] = make(map[string]string)
 		result["status"] = 500
 		result["message"] = err.Error()
 	} else {
-		result[output_field] = output
+		result["output"] = output
 		result["status"] = 200
 		result["message"] = "OK"
 	}
@@ -140,12 +140,15 @@ func FormJsonString(output_field string, output interface{}, err error) (string,
 }
 
 func PrintProtocols(protocolCmdMap map[string]protocols.ProtocolEntry) {
-	outputMapProtocols := make(map[string]interface{})
+	var outputMapProtocols []protocols.ProtocolEntryInfo
 	for _, v := range protocolCmdMap {
-		outputMapProtocols[v.Information.Id] = v.Information
+		outputMapProtocols = append(outputMapProtocols, v.Information)
 	}
 
-	jsonOut, _ := FormJsonString("protocols", outputMapProtocols, nil)
+	output := make(map[string]interface{})
+	output["protocols"] = outputMapProtocols
+
+	jsonOut, _ := FormJsonString(output, nil)
 
 	fmt.Println(string(jsonOut))
 }
@@ -224,7 +227,10 @@ func main() {
 		resultErr = responseParseErr
 	}
 
-	jsonOut, _ := FormJsonString("servers", servers, resultErr)
+	output := make(map[string]interface{})
+	output["servers"] = servers
+
+	jsonOut, _ := FormJsonString(output, resultErr)
 
 	fmt.Println(jsonOut)
 }
