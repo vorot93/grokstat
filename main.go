@@ -20,10 +20,16 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/grokstat/grokstat/protocols"
 )
+
+type jsonInputFlags struct {
+	Ip string `json:"ip"`
+	Protocol string `json:"protocol"`
+}
 
 // A convenience function for creating UDP connections
 func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
@@ -128,45 +134,73 @@ func FormJsonString(output_field string, output interface{}, err error) (string,
 	return string(jsonOut), jsonErr
 }
 
+func PrintProtocols(protocolCmdMap map[string]protocols.ProtocolEntry) {
+	outputMapProtocols := make(map[string]interface{})
+	for _, v := range protocolCmdMap {
+		outputMapProtocols[v.Information.Id] = v.Information
+	}
+
+	jsonOut, _ := FormJsonString("protocols", outputMapProtocols, nil)
+
+	fmt.Println(string(jsonOut))
+}
+
 func main() {
 	var remoteIp string
-	var protocolFlag string
-	var showProtocolsFlag bool
-	flag.StringVar(&remoteIp, "ip", "", "IP address of server to query.")
-	flag.StringVar(&protocolFlag, "protocol", "", "Server protocol to use.")
-	flag.BoolVar(&showProtocolsFlag, "showProtocols", false, "Output available server protocols.")
+	var remoteIpDefault = ""
+
+	var selectedProtocol string
+	var selectedProtocolDefault = ""
+
+	var showProtocols bool
+	var showProtocolsDefault = false
+	var jsonInput bool
+	var jsonInputDefault = false
+
+	flag.BoolVar(&jsonInput, "json-input", jsonInputDefault, "Read flags as JSON from standard input.")
+	flag.StringVar(&remoteIp, "ip", remoteIpDefault, "IP address of server to query.")
+	flag.StringVar(&selectedProtocol, "protocol", selectedProtocolDefault, "Server protocol to use.")
+	flag.BoolVar(&showProtocols, "showProtocols", showProtocolsDefault, "Output available server protocols.")
 	flag.Parse()
+
+	var resultErr error
 
 	protocolCmdMap := protocols.MakeProtocolMap()
 
-	if flag.NFlag() == 0 {flag.PrintDefaults();return}
+	if jsonInput {
+		remoteIp = remoteIpDefault
+		selectedProtocol = selectedProtocolDefault
+		showProtocols = showProtocolsDefault
 
-	if showProtocolsFlag {
-		outputMapProtocols := make(map[string]interface{})
-		for _, v := range protocolCmdMap {
-			outputMapProtocols[v.Information.Id] = v.Information
-		}
+		//jsonFlagsParseErr := errors.New("Error parsing flags from standard input")
 
-		jsonOut, _ := FormJsonString("protocols", outputMapProtocols, nil)
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
 
-		fmt.Println(string(jsonOut))
+		jsonFlags := jsonInputFlags{Ip: remoteIpDefault, Protocol: selectedProtocolDefault}
+		_ = json.Unmarshal([]byte(text), &jsonFlags)
+		//if jsonErr != nil {FormJsonString("", nil, jsonFlagsParseErr); FormJsonString("", nil, jsonErr); return}
 
-		return
+		remoteIp = jsonFlags.Ip
+		selectedProtocol = jsonFlags.Protocol
 	}
 
-	var resultErr error
+	if flag.NFlag() == 0 {flag.PrintDefaults();return}
+
+	if showProtocols {PrintProtocols(protocolCmdMap);return}
+
 
 	if remoteIp == "" {
 		resultErr = errors.New("Please specify a valid IP.")
 	}
-	if protocolFlag == "" {
+	if selectedProtocol == "" {
 		resultErr = errors.New("Please specify the protocol.")
 	}
 
 	var protocol protocols.ProtocolEntry
 	if resultErr == nil {
 		var g_ok bool
-		protocol, g_ok = protocolCmdMap[protocolFlag]
+		protocol, g_ok = protocolCmdMap[selectedProtocol]
 		if g_ok == false {
 			resultErr = errors.New("Invalid protocol specified.")
 		}
