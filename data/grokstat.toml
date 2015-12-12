@@ -1,0 +1,11 @@
+[[Protocols]]
+Id = "q3m"
+Template = "Q3M"
+
+[[Protocols]]
+Id = "xonoticm"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "Xonotic Master"
+RequestPreludeTemplate = "{{.PreludeStarter}}getservers Xonotic {{.Version}} empty full"
+Version = "3"

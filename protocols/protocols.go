@@ -7,57 +7,66 @@ import (
 	"github.com/grokstat/grokstat/protocols/q3m"
 )
 
-type ProtocolEntryInfo struct {
-	Id                      string                                 `json:"id"`
-	Name                    string                                 `json:"name"`
-	HttpProtocol            string                                 `json:"http_protocol"`
-	RequestPreludeTemplate  string                                 `json:"request_prelude_template"`
-	ResponseType            string                                 `json:"response_type"`
+type ProtocolEntryBase struct {
 	ResponseParseFunc       func([]byte, []byte) ([]string, error) `json:"-"`
-	ResponsePreludeTemplate string                                 `json:"response_prelude_template"`
-	Version                 string                                 `json:"version"`
-	DefaultRequestPort      string                                 `json:"default_request_port"`
+	HttpProtocol            string                                 `json:"http_protocol"`
+	ResponseType            string                                 `json:"response_type"`
 }
+
+type ProtocolEntryInfo map[string]string
 
 // Server query protocol entry defining grokstat's behavior
 type ProtocolEntry struct {
+	Base            ProtocolEntryBase
 	Information     ProtocolEntryInfo
-	RequestPrelude  string
-	ResponsePrelude string
 }
 
-// Construct a new protocol entry and return it to user
-func NewProtocolEntry(entry_info ProtocolEntryInfo) ProtocolEntry {
-	entry := ProtocolEntry{Information: entry_info}
+func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
+	entryInformation := make(ProtocolEntryInfo, len(entryTemplate.Information))
+	for k, v := range entryTemplate.Information {
+		entryInformation[k] = v
+	}
 
-	buf1 := new(bytes.Buffer)
-	t1, _ := template.New("Request template").Parse(entry.Information.RequestPreludeTemplate)
-	t1.Execute(buf1, entry.Information)
-	entry.RequestPrelude = buf1.String()
+	entry := ProtocolEntry{Base: entryTemplate.Base, Information: entryInformation}
 
-	buf2 := new(bytes.Buffer)
-	t2, _ := template.New("Response template").Parse(entry.Information.ResponsePreludeTemplate)
-	t2.Execute(buf2, entry.Information)
-	entry.ResponsePrelude = buf2.String()
 
 	return entry
 }
 
+// Construct a new protocol entry and return it to user
+func MakeRequestPrelude(entry ProtocolEntryInfo) string {
+	buf := new(bytes.Buffer)
+	t, _ := template.New("Request template").Parse(entry["RequestPreludeTemplate"])
+	t.Execute(buf, entry)
+	return buf.String()
+}
+
+func MakeResponsePrelude(entry ProtocolEntryInfo) string {
+	buf := new(bytes.Buffer)
+	t, _ := template.New("Response template").Parse(entry["ResponsePreludeTemplate"])
+	t.Execute(buf, entry)
+	return buf.String()
+}
+
 // Returns a map with protocols initialized
-func MakeProtocolMap() map[string]ProtocolEntry {
-	q3m_template := ProtocolEntryInfo{Id: "q3m", Name: "Quake III Arena Master", HttpProtocol: "udp", RequestPreludeTemplate: "\xFF\xFF\xFF\xFFgetservers {{.Version}} empty full\n", ResponseType: "Server list", ResponseParseFunc: q3m.ParseMasterResponse, ResponsePreludeTemplate: "\xFF\xFF\xFF\xFFgetserversResponse", Version: "68", DefaultRequestPort: "27950"}
+func MakeProtocolMap(configData []ProtocolConfig) map[string]ProtocolEntry {
+	templates := make(map[string]ProtocolEntry)
+	templates["Q3M"] = ProtocolEntry{Base: ProtocolEntryBase{ResponseParseFunc: q3m.ParseMasterResponse, HttpProtocol: "udp", ResponseType: "Server list"}, Information: ProtocolEntryInfo{"Name": "Quake III Arena Master", "PreludeStarter": "\xFF\xFF\xFF\xFF", "RequestPreludeTemplate": "{{.PreludeStarter}}getservers {{.Version}} empty full\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}getserversResponse", "Version": "68", "DefaultRequestPort": "27950"}}
 
 	protocolMap := make(map[string]ProtocolEntry)
 
-	q3m_protocol := q3m_template
-	protocolMap["q3m"] = NewProtocolEntry(ProtocolEntryInfo(q3m_protocol))
+	for _, configEntry := range configData {
+		entryId := configEntry.Id
+		templateId := configEntry.Template
+		overrides := configEntry.Overrides
 
-	xonoticm_protocol := q3m_template
-	xonoticm_protocol.Id = "xonoticm"
-	xonoticm_protocol.Name = "Xonotic Master"
-	xonoticm_protocol.RequestPreludeTemplate = "\377\377\377\377getservers Xonotic {{.Version}} empty full"
-	xonoticm_protocol.Version = "3"
-	protocolMap["xonoticm"] = NewProtocolEntry(ProtocolEntryInfo(xonoticm_protocol))
+		protocolEntry := MakeProtocolEntry(templates[templateId])
+		for k, v := range overrides {
+			protocolEntry.Information[k] = v
+		}
+
+		protocolMap[entryId] = protocolEntry
+	}
 
 	return protocolMap
 }

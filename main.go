@@ -28,6 +28,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
+
+	"github.com/grokstat/grokstat/bindata"
 	"github.com/grokstat/grokstat/protocols"
 )
 
@@ -35,6 +38,12 @@ type jsonInputFlags struct {
 	Ip string `json:"ip"`
 	Protocol string `json:"protocol"`
 }
+
+type ConfigFile struct {
+	Protocols []protocols.ProtocolConfig `toml:"Protocols"`
+}
+
+var DefaultConfigBinPath string = "data/grokstat.toml"
 
 // A convenience function for creating UDP connections
 func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
@@ -58,7 +67,7 @@ func newTCPConnection(addr string, protocol string) (*net.TCPConn, error) {
 	return conn, nil
 }
 
-func connect_send_receive(httpProtocol string, addr string, request []byte) ([]byte, error) {
+func QueryServer(httpProtocol string, addr string, request []byte) ([]byte, error) {
 	var status []byte
 	var err error
 	emptyResponse := errors.New("No response from server")
@@ -153,7 +162,20 @@ func PrintProtocols(protocolCmdMap map[string]protocols.ProtocolEntry) {
 	fmt.Println(string(jsonOut))
 }
 
+func PrintError(err error) {
+	output := ""
+	jsonOut, _ := FormJsonString(output, err)
+	fmt.Println(jsonOut)
+	return
+}
+
 func main() {
+	var jsonInput bool
+	var jsonInputDefault = false
+
+	var customConfigPath string
+	var customConfigPathDefault = ""
+
 	var remoteIp string
 	var remoteIpDefault = ""
 
@@ -162,19 +184,26 @@ func main() {
 
 	var showProtocols bool
 	var showProtocolsDefault = false
-	var jsonInput bool
-	var jsonInputDefault = false
 
 	flag.BoolVar(&jsonInput, "json-input", jsonInputDefault, "Read flags as JSON from standard input.")
+	flag.StringVar(&customConfigPath, "custom-config", customConfigPathDefault, "Load a custom config file.")
 	flag.StringVar(&remoteIp, "ip", remoteIpDefault, "IP address of server to query.")
 	flag.StringVar(&selectedProtocol, "protocol", selectedProtocolDefault, "Server protocol to use.")
 	flag.BoolVar(&showProtocols, "show-protocols", showProtocolsDefault, "Output available server protocols.")
 	flag.Parse()
 
-	var resultErr error
+	output := make(map[string]interface{})
 
-	protocolCmdMap := protocols.MakeProtocolMap()
+	var configInstance ConfigFile
 
+	var defaultConfigData ConfigFile
+	defaultConfigBinData, err := bindata.Asset(DefaultConfigBinPath)
+	if err != nil {PrintError(errors.New("Default config file not found.")); return}
+	toml.Decode(string(defaultConfigBinData), &defaultConfigData)
+
+	if flag.NFlag() == 0 {flag.PrintDefaults();return}
+
+	// Resets flags to default state, reads JSON from stdin instead
 	if jsonInput {
 		remoteIp = remoteIpDefault
 		selectedProtocol = selectedProtocolDefault
@@ -190,47 +219,43 @@ func main() {
 		selectedProtocol = jsonFlags.Protocol
 	}
 
-	if flag.NFlag() == 0 {flag.PrintDefaults();return}
+	if customConfigPath == "" {
+		configInstance = defaultConfigData
+	} else {
+		var customConfigData ConfigFile
+		_, err := toml.DecodeFile(customConfigPath, &customConfigData)
+		if err != nil {PrintError(errors.New("Error loading custom config file.")); return}
+		configInstance = customConfigData
+	}
+
+	protocolCmdMap := protocols.MakeProtocolMap(configInstance.Protocols)
 
 	if showProtocols {PrintProtocols(protocolCmdMap);return}
 
-
-	if remoteIp == "" {
-		resultErr = errors.New("Please specify a valid IP.")
-	}
-	if selectedProtocol == "" {
-		resultErr = errors.New("Please specify the protocol.")
-	}
+	if remoteIp == "" {PrintError(errors.New("Please specify a valid IP.")); return}
+	if selectedProtocol == "" {PrintError(errors.New("Please specify the protocol.")); return}
 
 	var protocol protocols.ProtocolEntry
-	if resultErr == nil {
-		var g_ok bool
-		protocol, g_ok = protocolCmdMap[selectedProtocol]
-		if g_ok == false {
-			resultErr = errors.New("Invalid protocol specified.")
-		}
-	}
+	var g_ok bool
+	protocol, g_ok = protocolCmdMap[selectedProtocol]
+	if g_ok == false {PrintError(errors.New("Invalid protocol specified.")); return}
 
 	var response []byte
-	if resultErr == nil {
-		var responseErr error
-		ipMap := ParseIPAddr(remoteIp, protocol.Information.DefaultRequestPort)
-		hostname := ipMap["host"]
-		response, responseErr = connect_send_receive(protocol.Information.HttpProtocol, hostname, []byte(protocol.RequestPrelude))
-		resultErr = responseErr
-	}
+	var responseErr error
+	ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
+	hostname := ipMap["host"]
+	response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, []byte(protocols.MakeRequestPrelude(protocol.Information)))
+	if responseErr != nil {PrintError(responseErr); return}
 
-	var servers []string
-	if resultErr == nil {
-		var responseParseErr error
-		servers, responseParseErr = protocol.Information.ResponseParseFunc([]byte(response), []byte(protocol.ResponsePrelude))
-		resultErr = responseParseErr
-	}
+	var serverData []string
 
-	output := make(map[string]interface{})
-	output["servers"] = servers
+	var responseParseErr error
+	serverData, responseParseErr = protocol.Base.ResponseParseFunc([]byte(response), []byte(protocols.MakeResponsePrelude(protocol.Information)))
+	if responseParseErr != nil {PrintError(responseParseErr); return}
 
-	jsonOut, _ := FormJsonString(output, resultErr)
+	output["servers"] = serverData
+
+	jsonOut, _ := FormJsonString(output, nil)
 
 	fmt.Println(jsonOut)
 }
