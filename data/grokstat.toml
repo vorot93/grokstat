@@ -24,3 +24,10 @@ Template = "Q3M"
 Name = "Warsow Master"
 RequestPreludeTemplate = "{{.PreludeStarter}}getservers Warsow {{.Version}} empty full"
 Version = "20"
+
+[[Protocols]]
+Id = "unvanquishedm"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "Unvanquished Master"
+Version = "86"
