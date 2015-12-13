@@ -9,3 +9,10 @@ Template = "Q3M"
 Name = "Xonotic Master"
 RequestPreludeTemplate = "{{.PreludeStarter}}getservers Xonotic {{.Version}} empty full"
 Version = "3"
+
+[[Protocols]]
+Id = "etm"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "Wolfenstein: Enemy Territory Master"
+Version = "84"
