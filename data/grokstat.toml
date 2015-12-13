@@ -16,3 +16,11 @@ Template = "Q3M"
 [Protocols.Overrides]
 Name = "Wolfenstein: Enemy Territory Master"
 Version = "84"
+
+[[Protocols]]
+Id = "warsowm"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "Warsow Master"
+RequestPreludeTemplate = "{{.PreludeStarter}}getservers Warsow {{.Version}} empty full"
+Version = "20"
