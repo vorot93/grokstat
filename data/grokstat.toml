@@ -31,3 +31,10 @@ Template = "Q3M"
 [Protocols.Overrides]
 Name = "Unvanquished Master"
 Version = "86"
+
+[[Protocols]]
+Id = "openarenam"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "OpenArena Master"
+Version = "71"
