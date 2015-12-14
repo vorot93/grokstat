@@ -4,13 +4,21 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+
+	"github.com/grokstat/grokstat/models"
+	"github.com/grokstat/grokstat/util"
 )
 
-func parseMasterServerEntry(entry_raw []byte) string {
-	if len(entry_raw) != 6 {return ""}
+func MakeRequestPacket(protocolInfo models.ProtocolEntryInfo) []byte {
+	templ, _ := protocolInfo["RequestPreludeTemplate"]
+	return []byte(util.ParseTemplate(templ, protocolInfo))
+}
+
+func parseMasterServerEntry(entryRaw []byte) string {
+	if len(entryRaw) != 6 {return ""}
 
 	entry := make([]int, 6)
-	for i, v := range entry_raw {
+	for i, v := range entryRaw {
 		entry[i] = int(v)
 	}
 	a := entry[0]
@@ -21,28 +29,31 @@ func parseMasterServerEntry(entry_raw []byte) string {
 
 	if a == 0 {return ""}
 
-	server_entry := fmt.Sprintf("%d.%d.%d.%d:%d", a, b, c, d, port)
+	serverEntry := fmt.Sprintf("%d.%d.%d.%d:%d", a, b, c, d, port)
 
-	return server_entry
+	return serverEntry
 }
 
 // Parses the response from Quake III Arena master server.
-func ParseMasterResponse(response []byte, requestPrelude []byte) ([]string, error) {
-	servers := []string{}
+func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (interface {}, error) {
+    responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
+    responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
 	splitter := []byte{0x5c}
 
-	if bytes.Equal(response[:len(requestPrelude)], requestPrelude) != true {
+	servers := []string{}
+
+	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
 		return []string{}, errors.New("Invalid response prelude.")
 	}
 
-	response_body := response[len(requestPrelude):]
-	response_split := bytes.Split(response_body, splitter)
-	for _, entry_raw := range response_split {
-		server_entry := parseMasterServerEntry(entry_raw)
+	responseBody := response[len(responsePrelude):]
+	responseBodySplit := bytes.Split(responseBody, splitter)
+	for _, entryRaw := range responseBodySplit {
+		serverEntry := parseMasterServerEntry(entryRaw)
 
-		if len(server_entry) > 0 {
-			servers = append(servers, server_entry)
+		if len(serverEntry) > 0 {
+			servers = append(servers, serverEntry)
 		}
 	}
 	return servers, nil

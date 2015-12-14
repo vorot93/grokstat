@@ -1,66 +1,27 @@
 package protocols
 
 import (
-	"bytes"
-	"text/template"
+	"time"
 
+	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols/q3m"
+	"github.com/grokstat/grokstat/protocols/q3s"
 )
 
-type ProtocolEntryBase struct {
-	ResponseParseFunc       func([]byte, []byte) ([]string, error) `json:"-"`
-	HttpProtocol            string                                 `json:"http_protocol"`
-	ResponseType            string                                 `json:"response_type"`
-}
-
-type ProtocolEntryInfo map[string]string
-
-// Server query protocol entry defining grokstat's behavior
-type ProtocolEntry struct {
-	Base            ProtocolEntryBase
-	Information     ProtocolEntryInfo
-}
-
-func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
-	entryInformation := make(ProtocolEntryInfo, len(entryTemplate.Information))
-	for k, v := range entryTemplate.Information {
-		entryInformation[k] = v
-	}
-
-	entry := ProtocolEntry{Base: entryTemplate.Base, Information: entryInformation}
-
-
-	return entry
-}
-
-// Construct a new protocol entry and return it to user
-func MakeRequestPrelude(entry ProtocolEntryInfo) string {
-	buf := new(bytes.Buffer)
-	t, _ := template.New("Request template").Parse(entry["RequestPreludeTemplate"])
-	t.Execute(buf, entry)
-	return buf.String()
-}
-
-func MakeResponsePrelude(entry ProtocolEntryInfo) string {
-	buf := new(bytes.Buffer)
-	t, _ := template.New("Response template").Parse(entry["ResponsePreludeTemplate"])
-	t.Execute(buf, entry)
-	return buf.String()
-}
-
 // Returns a map with protocols initialized
-func MakeProtocolMap(configData []ProtocolConfig) map[string]ProtocolEntry {
-	templates := make(map[string]ProtocolEntry)
-	templates["Q3M"] = ProtocolEntry{Base: ProtocolEntryBase{ResponseParseFunc: q3m.ParseMasterResponse, HttpProtocol: "udp", ResponseType: "Server list"}, Information: ProtocolEntryInfo{"Name": "Quake III Arena Master", "PreludeStarter": "\xFF\xFF\xFF\xFF", "RequestPreludeTemplate": "{{.PreludeStarter}}getservers {{.Version}} empty full\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}getserversResponse", "Version": "68", "DefaultRequestPort": "27950"}}
+func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntry {
+	templates := make(map[string]models.ProtocolEntry)
+	templates["Q3M"] = models.ProtocolEntry{Base: models.ProtocolEntryBase{IsMaster: true, MakeRequestPacketFunc: q3m.MakeRequestPacket, ResponseParseFunc: q3m.ParseResponse, HttpProtocol: "udp", ResponseType: "Server list"}, Information: models.ProtocolEntryInfo{"Name": "Quake III Arena Master", "MasterOf": "Q3S", "PreludeStarter": "\xFF\xFF\xFF\xFF", "RequestPreludeTemplate": "{{.PreludeStarter}}getservers {{.Version}} empty full\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}getserversResponse", "Version": "68", "DefaultRequestPort": "27950"}}
+	templates["Q3S"] = models.ProtocolEntry{Base: models.ProtocolEntryBase{IsMaster: false, MakeRequestPacketFunc: q3s.MakeRequestPacket, ResponseParseFunc: q3s.ParseResponse, HttpProtocol: "udp", ResponseType: "Server info"}, Information: models.ProtocolEntryInfo{"Name": "Quake III Arena Server", "PreludeStarter": "\xFF\xFF\xFF\xFF", "Challenge": "GrokStat_" + string(time.Now().Unix()), "RequestPreludeTemplate": "{{.PreludeStarter}}getinfo {{.Challenge}}\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}infoResponse", "Version": "68", "DefaultRequestPort": "27950"}}
 
-	protocolMap := make(map[string]ProtocolEntry)
+	protocolMap := make(map[string]models.ProtocolEntry)
 
 	for _, configEntry := range configData {
 		entryId := configEntry.Id
 		templateId := configEntry.Template
 		overrides := configEntry.Overrides
 
-		protocolEntry := MakeProtocolEntry(templates[templateId])
+		protocolEntry := models.MakeProtocolEntry(templates[templateId])
 		for k, v := range overrides {
 			protocolEntry.Information[k] = v
 		}

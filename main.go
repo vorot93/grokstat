@@ -31,6 +31,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/grokstat/grokstat/bindata"
+	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols"
 )
 
@@ -148,8 +149,8 @@ func FormJsonString(output interface{}, err error) (string, error) {
 	return string(jsonOut), jsonErr
 }
 
-func PrintProtocols(protocolCmdMap map[string]protocols.ProtocolEntry) {
-	var outputMapProtocols []protocols.ProtocolEntryInfo
+func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry) {
+	var outputMapProtocols []models.ProtocolEntryInfo
 	for _, v := range protocolCmdMap {
 		outputMapProtocols = append(outputMapProtocols, v.Information)
 	}
@@ -235,7 +236,7 @@ func main() {
 	if remoteIp == "" {PrintError(errors.New("Please specify a valid IP.")); return}
 	if selectedProtocol == "" {PrintError(errors.New("Please specify the protocol.")); return}
 
-	var protocol protocols.ProtocolEntry
+	var protocol models.ProtocolEntry
 	var g_ok bool
 	protocol, g_ok = protocolCmdMap[selectedProtocol]
 	if g_ok == false {PrintError(errors.New("Invalid protocol specified.")); return}
@@ -244,16 +245,21 @@ func main() {
 	var responseErr error
 	ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
 	hostname := ipMap["host"]
-	response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, []byte(protocols.MakeRequestPrelude(protocol.Information)))
+	response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
 	if responseErr != nil {PrintError(responseErr); return}
 
-	var serverData []string
+	serverData, responseParseErr := protocol.Base.ResponseParseFunc(response, protocol.Information)
+	if protocol.Base.IsMaster == true {
+		_, assertOk := serverData.([]string)
+		if responseParseErr != nil || !assertOk {PrintError(responseParseErr); return}
 
-	var responseParseErr error
-	serverData, responseParseErr = protocol.Base.ResponseParseFunc([]byte(response), []byte(protocols.MakeResponsePrelude(protocol.Information)))
-	if responseParseErr != nil {PrintError(responseParseErr); return}
+		output["servers"] = serverData
+	} else {
+		_, assertOk := serverData.(models.ServerEntry)
+		if responseParseErr != nil || !assertOk {PrintError(responseParseErr); return}
 
-	output["servers"] = serverData
+		output["server_info"] = serverData
+	}
 
 	jsonOut, _ := FormJsonString(output, nil)
 

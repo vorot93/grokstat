@@ -3,6 +3,10 @@ Id = "q3m"
 Template = "Q3M"
 
 [[Protocols]]
+Id = "q3s"
+Template = "Q3S"
+
+[[Protocols]]
 Id = "xonoticm"
 Template = "Q3M"
 [Protocols.Overrides]
