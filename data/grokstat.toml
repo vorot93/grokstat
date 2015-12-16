@@ -7,6 +7,13 @@ Id = "q3s"
 Template = "Q3S"
 
 [[Protocols]]
+Id = "sof2s"
+Template = "Q3S"
+[Protocols.Overrides]
+Name = "Soldier of Fortune 2"
+DefaultRequestPort = "20100"
+
+[[Protocols]]
 Id = "xonoticm"
 Template = "Q3M"
 [Protocols.Overrides]
@@ -42,3 +49,12 @@ Template = "Q3M"
 [Protocols.Overrides]
 Name = "OpenArena Master"
 Version = "71"
+
+[[Protocols]]
+Id = "sof2m"
+Template = "Q3M"
+[Protocols.Overrides]
+Name = "Soldier of Fortune 2 Master"
+Version = "2004"
+RequestQueryParams = "SOF2FULL"
+DefaultRequestPort = "20110"
