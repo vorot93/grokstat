@@ -3,15 +3,11 @@ grokstat is a tool for querying game servers for various information: server lis
 
 The program takes protocol name and remote ip address as arguments, fetches information from the remote server, parses it and outputs back as JSON. As convenience the status and message are also provided.
 
-Usage of grokstat utility:
-	-ip string
-		IP address of server to query.
-	-json-input
-		Read JSON from standard input instead of flags
-	-protocol string
-		Server protocol to use.
-	-show-protocols
-		Output available server protocols.
+grokstat uses JSON input instead of command line flags. The JSON input is structured as follows:
+	hosts - array of strings - hosts to query
+	protocol - string - protocol to use
+	show-protocols - boolean - if true, show protocols and exit
+	custom-config-path - path of custom config file to be used
 */
 package main
 
@@ -20,7 +16,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"net/url"
@@ -35,13 +30,45 @@ import (
 	"github.com/grokstat/grokstat/protocols"
 )
 
-type jsonInputFlags struct {
-	Ip string `json:"ip"`
-	Protocol string `json:"protocol"`
+type InputData struct {
+	Hosts            []string `json:"hosts"`
+	Protocol         string   `json:"protocol"`
+	ShowProtocols    bool     `json:"show-protocols"`
+	CustomConfigPath string   `json:"custom-config-path"`
 }
 
 type ConfigFile struct {
 	Protocols []protocols.ProtocolConfig `toml:"Protocols"`
+}
+
+type JsonResponse struct {
+	Version string      `json:"version"`
+	Status  int         `json:"status"`
+	Message string      `json:"message"`
+	Output  interface{} `json:"output"`
+}
+
+// Forms a JSON string out of Grokstat output.
+func FormJsonResponse(output interface{}, err error) (string, error) {
+	result := JsonResponse{Version: VERSION}
+
+	if err != nil {
+		result.Output = `{}`
+		result.Status = 500
+		result.Message = err.Error()
+	} else {
+		result.Output = output
+		result.Status = 200
+		result.Message = "OK"
+	}
+
+	jsonOut, jsonErr := json.Marshal(result)
+
+	if jsonErr != nil {
+		jsonOut = []byte(`{}`)
+	}
+
+	return string(jsonOut), jsonErr
 }
 
 var DefaultConfigBinPath string = "data/grokstat.toml"
@@ -127,28 +154,6 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-// Forms a JSON string out of Grokstat output.
-func FormJsonString(output interface{}, err error) (string, error) {
-	result := make(map[string]interface{})
-	if err != nil {
-		result["output"] = make(map[string]string)
-		result["status"] = 500
-		result["message"] = err.Error()
-	} else {
-		result["output"] = output
-		result["status"] = 200
-		result["message"] = "OK"
-	}
-
-	jsonOut, jsonErr := json.Marshal(result)
-
-	if jsonErr != nil {
-		jsonOut = []byte(`{}`)
-	}
-
-	return string(jsonOut), jsonErr
-}
-
 func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry) {
 	var outputMapProtocols []models.ProtocolEntryInfo
 	for _, v := range protocolCmdMap {
@@ -158,110 +163,114 @@ func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry) {
 	output := make(map[string]interface{})
 	output["protocols"] = outputMapProtocols
 
-	jsonOut, _ := FormJsonString(output, nil)
+	jsonOut, _ := FormJsonResponse(output, nil)
 
 	fmt.Println(string(jsonOut))
 }
 
 func PrintError(err error) {
 	output := ""
-	jsonOut, _ := FormJsonString(output, err)
+	jsonOut, _ := FormJsonResponse(output, err)
 	fmt.Println(jsonOut)
 	return
 }
 
 func main() {
-	var jsonInput bool
-	var jsonInputDefault = false
-
-	var customConfigPath string
-	var customConfigPathDefault = ""
-
-	var remoteIp string
-	var remoteIpDefault = ""
-
-	var selectedProtocol string
-	var selectedProtocolDefault = ""
-
-	var showProtocols bool
-	var showProtocolsDefault = false
-
-	flag.BoolVar(&jsonInput, "json-input", jsonInputDefault, "Read flags as JSON from standard input.")
-	flag.StringVar(&customConfigPath, "custom-config", customConfigPathDefault, "Load a custom config file.")
-	flag.StringVar(&remoteIp, "ip", remoteIpDefault, "IP address of server to query.")
-	flag.StringVar(&selectedProtocol, "protocol", selectedProtocolDefault, "Server protocol to use.")
-	flag.BoolVar(&showProtocols, "show-protocols", showProtocolsDefault, "Output available server protocols.")
-	flag.Parse()
-
 	output := make(map[string]interface{})
 
 	var configInstance ConfigFile
 
-	var defaultConfigData ConfigFile
-	defaultConfigBinData, err := bindata.Asset(DefaultConfigBinPath)
-	if err != nil {PrintError(errors.New("Default config file not found.")); return}
-	toml.Decode(string(defaultConfigBinData), &defaultConfigData)
+	// Resets flags to default state, reads JSON from stdin
+	reader := bufio.NewReader(os.Stdin)
+	text, _ := reader.ReadString('\n')
 
-	if flag.NFlag() == 0 {flag.PrintDefaults();return}
+	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false}
+	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
-	// Resets flags to default state, reads JSON from stdin instead
-	if jsonInput {
-		remoteIp = remoteIpDefault
-		selectedProtocol = selectedProtocolDefault
-		showProtocols = showProtocolsDefault
-
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-
-		jsonFlags := jsonInputFlags{Ip: remoteIpDefault, Protocol: selectedProtocolDefault}
-		_ = json.Unmarshal([]byte(text), &jsonFlags)
-
-		remoteIp = jsonFlags.Ip
-		selectedProtocol = jsonFlags.Protocol
+	if jsonErr != nil {
+		PrintError(jsonErr)
+		return
 	}
 
+	hosts := jsonFlags.Hosts
+	showProtocols := jsonFlags.ShowProtocols
+	customConfigPath := jsonFlags.CustomConfigPath
+	selectedProtocol := jsonFlags.Protocol
+
 	if customConfigPath == "" {
-		configInstance = defaultConfigData
+		configBinData, err := bindata.Asset(DefaultConfigBinPath)
+		if err != nil {
+			PrintError(errors.New("Default config file not found."))
+			return
+		}
+		toml.Decode(string(configBinData), &configInstance)
 	} else {
-		var customConfigData ConfigFile
-		_, err := toml.DecodeFile(customConfigPath, &customConfigData)
-		if err != nil {PrintError(errors.New("Error loading custom config file.")); return}
-		configInstance = customConfigData
+		_, err := toml.DecodeFile(customConfigPath, &configInstance)
+		if err != nil {
+			PrintError(errors.New("Error loading custom config file."))
+			return
+		}
 	}
 
 	protocolCmdMap := protocols.MakeProtocolMap(configInstance.Protocols)
 
-	if showProtocols {PrintProtocols(protocolCmdMap);return}
+	if showProtocols {
+		PrintProtocols(protocolCmdMap)
+		return
+	}
 
-	if remoteIp == "" {PrintError(errors.New("Please specify a valid IP.")); return}
-	if selectedProtocol == "" {PrintError(errors.New("Please specify the protocol.")); return}
+	if len(hosts) == 0 {
+		PrintError(errors.New("No hosts specified."))
+		return
+	}
+	remoteIp := hosts[0]
+	if remoteIp == "" {
+		PrintError(errors.New("Please specify a valid IP."))
+		return
+	}
+	if selectedProtocol == "" {
+		PrintError(errors.New("Please specify the protocol."))
+		return
+	}
 
 	var protocol models.ProtocolEntry
 	var g_ok bool
 	protocol, g_ok = protocolCmdMap[selectedProtocol]
-	if g_ok == false {PrintError(errors.New("Invalid protocol specified.")); return}
+	if g_ok == false {
+		PrintError(errors.New("Invalid protocol specified."))
+		return
+	}
 
 	var response []byte
 	var responseErr error
 	ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
 	hostname := ipMap["host"]
 	response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
-	if responseErr != nil {PrintError(responseErr); return}
+	if responseErr != nil {
+		PrintError(responseErr)
+		return
+	}
 
 	serverData, responseParseErr := protocol.Base.ResponseParseFunc(response, protocol.Information)
 	if protocol.Base.IsMaster == true {
 		_, assertOk := serverData.([]string)
-		if responseParseErr != nil || !assertOk {PrintError(responseParseErr); return}
+		if responseParseErr != nil || !assertOk {
+			PrintError(responseParseErr)
+			return
+		}
 
 		output["servers"] = serverData
 	} else {
 		_, assertOk := serverData.(models.ServerEntry)
-		if responseParseErr != nil || !assertOk {PrintError(responseParseErr); return}
+		if responseParseErr != nil || !assertOk {
+			PrintError(responseParseErr)
+			return
+		}
 
 		output["server_info"] = serverData
 	}
 
-	jsonOut, _ := FormJsonString(output, nil)
+	jsonOut, _ := FormJsonResponse(output, nil)
 
 	fmt.Println(jsonOut)
 }
