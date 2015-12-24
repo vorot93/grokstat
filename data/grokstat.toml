@@ -1,6 +1,8 @@
 [[Protocols]]
 Id = "q3m"
 Template = "Q3M"
+[Protocols.Overrides]
+MasterOf = "q3s"
 
 [[Protocols]]
 Id = "q3s"

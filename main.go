@@ -175,9 +175,57 @@ func PrintError(err error) {
 	return
 }
 
-func main() {
-	output := make(map[string]interface{})
+func PrintJsonResponse(output interface{}, err error) {
+	jsonOut, _ := FormJsonResponse(output, err)
+	fmt.Println(jsonOut)
+}
 
+func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
+	protocol, g_ok := protocolCmdMap[selectedProtocol]
+	if g_ok == false {
+		PrintError(errors.New("Invalid protocol specified."))
+		return
+	}
+	for _, remoteIp := range hosts {
+		var data []models.ServerEntry
+		if remoteIp == "" {
+			continue
+		}
+
+		var response []byte
+		var responseErr error
+		ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
+		hostname := ipMap["host"]
+		response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
+		if responseErr != nil {
+			continue
+		}
+
+		serverData, responseParseErr := protocol.Base.ResponseParseFunc(response, protocol.Information)
+		if protocol.Base.IsMaster == true {
+			hosts, assertOk := serverData.([]string)
+			if responseParseErr != nil || !assertOk {
+				continue
+			}
+			
+			data, _ = Query(protocol.Information["MasterOf"], protocolCmdMap, hosts)
+		} else {
+			serverEntry, assertOk := serverData.(models.ServerEntry)
+			if responseParseErr != nil || !assertOk {
+				continue
+			}
+			data = []models.ServerEntry{serverEntry}
+			PrintJsonResponse(data, nil)
+		}
+		for _, v := range data {
+			output = append(output, v)
+		}
+	}
+
+	return output, err
+}
+
+func main() {
 	var configInstance ConfigFile
 
 	// Resets flags to default state, reads JSON from stdin
@@ -219,58 +267,21 @@ func main() {
 		return
 	}
 
-	if len(hosts) == 0 {
-		PrintError(errors.New("No hosts specified."))
-		return
-	}
-	remoteIp := hosts[0]
-	if remoteIp == "" {
-		PrintError(errors.New("Please specify a valid IP."))
-		return
-	}
 	if selectedProtocol == "" {
 		PrintError(errors.New("Please specify the protocol."))
 		return
 	}
-
-	var protocol models.ProtocolEntry
-	var g_ok bool
-	protocol, g_ok = protocolCmdMap[selectedProtocol]
-	if g_ok == false {
-		PrintError(errors.New("Invalid protocol specified."))
+	if len(hosts) == 0 {
+		PrintError(errors.New("No hosts specified."))
 		return
 	}
 
-	var response []byte
-	var responseErr error
-	ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
-	hostname := ipMap["host"]
-	response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
-	if responseErr != nil {
-		PrintError(responseErr)
+	output, err := Query(selectedProtocol, protocolCmdMap, hosts)
+
+	if err != nil {
+		PrintError(err)
 		return
-	}
-
-	serverData, responseParseErr := protocol.Base.ResponseParseFunc(response, protocol.Information)
-	if protocol.Base.IsMaster == true {
-		_, assertOk := serverData.([]string)
-		if responseParseErr != nil || !assertOk {
-			PrintError(responseParseErr)
-			return
-		}
-
-		output["servers"] = serverData
 	} else {
-		_, assertOk := serverData.(models.ServerEntry)
-		if responseParseErr != nil || !assertOk {
-			PrintError(responseParseErr)
-			return
-		}
-
-		output["server_info"] = serverData
+		PrintJsonResponse(output, err)
 	}
-
-	jsonOut, _ := FormJsonResponse(output, nil)
-
-	fmt.Println(jsonOut)
 }
