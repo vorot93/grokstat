@@ -5,7 +5,8 @@ type ProtocolEntryInfo map[string]string
 type ProtocolEntryBase struct {
 	IsMaster				bool								   `json:"is_master"`
 	MakeRequestPacketFunc   func(ProtocolEntryInfo) []byte		   `json:"-"`
-	ResponseParseFunc       func([]byte, ProtocolEntryInfo) (interface {}, error) `json:"-"`
+	MasterResponseParseFunc func([]byte, ProtocolEntryInfo) ([]string, error) `json:"-"`
+	ServerResponseParseFunc func([]byte, ProtocolEntryInfo) (ServerEntry, error) `json:"-"`
 	HttpProtocol            string                                 `json:"http_protocol"`
 	ResponseType            string                                 `json:"response_type"`
 }

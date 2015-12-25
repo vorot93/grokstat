@@ -35,7 +35,7 @@ func parseMasterServerEntry(entryRaw []byte) string {
 }
 
 // Parses the response from Quake III Arena master server.
-func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (interface {}, error) {
+func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
     responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
     responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 

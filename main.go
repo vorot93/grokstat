@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -181,46 +182,90 @@ func PrintJsonResponse(output interface{}, err error) {
 }
 
 func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
-	protocol, g_ok := protocolCmdMap[selectedProtocol]
-	if g_ok == false {
+	var wg sync.WaitGroup
+	var selectedQueryProtocol string
+	var queryProtocol models.ProtocolEntry
+	var serverHosts []string
+
+	protocol, p_ok := protocolCmdMap[selectedProtocol]
+	if p_ok == false {
 		PrintError(errors.New("Invalid protocol specified."))
 		return
 	}
-	for _, remoteIp := range hosts {
-		var data []models.ServerEntry
-		if remoteIp == "" {
-			continue
-		}
-
-		var response []byte
-		var responseErr error
-		ipMap := ParseIPAddr(remoteIp, protocol.Information["DefaultRequestPort"])
-		hostname := ipMap["host"]
-		response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
-		if responseErr != nil {
-			continue
-		}
-
-		serverData, responseParseErr := protocol.Base.ResponseParseFunc(response, protocol.Information)
-		if protocol.Base.IsMaster == true {
-			hosts, assertOk := serverData.([]string)
-			if responseParseErr != nil || !assertOk {
+	if protocol.Base.IsMaster {
+		var serverList []string
+		for _, masterIp := range hosts {
+			if masterIp == "" {
 				continue
 			}
-			
-			data, _ = Query(protocol.Information["MasterOf"], protocolCmdMap, hosts)
-		} else {
-			serverEntry, assertOk := serverData.(models.ServerEntry)
-			if responseParseErr != nil || !assertOk {
+			var response []byte
+			var responseErr error
+			ipMap := ParseIPAddr(masterIp, protocol.Information["DefaultRequestPort"])
+			hostname := ipMap["host"]
+			response, responseErr = QueryServer(protocol.Base.HttpProtocol, hostname, protocol.Base.MakeRequestPacketFunc(protocol.Information))
+			if responseErr != nil {
 				continue
 			}
-			data = []models.ServerEntry{serverEntry}
-			PrintJsonResponse(data, nil)
+
+			data, responseParseErr := protocol.Base.MasterResponseParseFunc(response, protocol.Information)
+			if responseParseErr != nil {
+				continue
+			}
+
+			for _, dataEntry := range data {
+				serverList = append(serverList, dataEntry)
+			}
 		}
-		for _, v := range data {
+		serverHosts = serverList
+		var q_ok bool
+		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
+		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
+		if q_ok == false {
+			PrintError(errors.New("Invalid query part attached to master protocol."))
+			return
+		}
+	} else {
+		serverHosts = hosts
+		queryProtocol = protocol
+	}
+
+	wg.Add(len(serverHosts))
+	dataChan := make(chan models.ServerEntry, 1)
+	for _, remoteIp := range serverHosts {
+		go func(remoteIp string, dataChan chan models.ServerEntry) {
+			defer wg.Done()
+			if remoteIp == "" {
+				return
+			}
+
+			var response []byte
+			var responseErr error
+			ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
+			hostname := ipMap["host"]
+			response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
+			if responseErr != nil {
+				return
+			}
+
+			serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(response, queryProtocol.Information)
+			serverEntry.Host = hostname
+			serverEntry.Protocol = selectedQueryProtocol
+
+			if responseParseErr != nil {
+				return
+			}
+			dataChan <- serverEntry
+		}(remoteIp, dataChan)
+	}
+
+	go func() {
+		defer wg.Done()
+		for v := range dataChan {
 			output = append(output, v)
 		}
-	}
+	}()
+
+	wg.Wait()
 
 	return output, err
 }
@@ -276,12 +321,12 @@ func main() {
 		return
 	}
 
-	output, err := Query(selectedProtocol, protocolCmdMap, hosts)
+	data, err := Query(selectedProtocol, protocolCmdMap, hosts)
 
 	if err != nil {
 		PrintError(err)
 		return
 	} else {
-		PrintJsonResponse(output, err)
+		PrintJsonResponse(map[string]interface{}{"servers": data}, err)
 	}
 }

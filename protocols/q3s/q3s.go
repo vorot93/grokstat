@@ -4,6 +4,8 @@ import (
     "bytes"
     "errors"
     "math"
+    "strconv"
+    "strings"
 
     "github.com/grokstat/grokstat/models"
     "github.com/grokstat/grokstat/util"
@@ -37,7 +39,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 }
 
 // Parses the response from Quake III Arena server
-func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (interface {}, error) {
+func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
     responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
     responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
@@ -56,6 +58,17 @@ func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (inte
     if ruleErr != nil {
         return models.ServerEntry{}, errors.New("Invalid rule string.")
     }
+    hostName, _ := rules["hostname"]
+    entry.Name = strings.TrimSpace(hostName)
+
+    numClients, nc_ok := rules["clients"]
+    if nc_ok {entry.NumClients, _ = strconv.ParseInt(strings.TrimSpace(numClients), 10, 64)}
+
+    maxClients, nc_ok := rules["sv_maxclients"]
+    if nc_ok {entry.MaxClients, _ = strconv.ParseInt(strings.TrimSpace(maxClients), 10, 64)}
+
+    secure, nc_ok := rules["sv_punkbuster"]
+    if strings.TrimSpace(secure) == "1" {entry.Secure = true}
 
     entry.Rules = rules
 
