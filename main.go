@@ -252,7 +252,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 			hostname := ipMap["host"]
 			response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
 			if responseErr != nil {
-				dataChan <- models.ServerEntry{Host: hostname, Status: responseErr.Error()}
+				dataChan <- models.ServerEntry{Host: hostname, Status: 503, Message: responseErr.Error()}
 				continue
 			}
 
@@ -261,11 +261,12 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 			serverEntry.Protocol = selectedQueryProtocol
 
 			if responseParseErr != nil {
-				dataChan <- models.ServerEntry{Host: hostname, Status: responseParseErr.Error()}
+				dataChan <- models.ServerEntry{Host: hostname, Status: 500, Message: responseParseErr.Error()}
 				continue
 			}
 
-			serverEntry.Status = "OK"
+			serverEntry.Status = 200
+			serverEntry.Message = "OK"
 
 			dataChan <- serverEntry
 		}
@@ -274,6 +275,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	for i := 0; i < workerNum; i++ {
 		wg.Add(1)
 		go queryWorker(i, remoteIpChan, dataChan)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	for _, host := range serverHosts {
