@@ -8,6 +8,7 @@ type PlayerEntry struct {
 
 type ServerEntry struct {
 	Protocol   string `json:"protocol"`
+	Status     string `json:"status"`
 	Host       string `json:"host"`
 	Name       string `json:"name"`
 	ModName    string `json:"modname"`

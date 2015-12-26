@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/eapache/channels"
 
 	"github.com/grokstat/grokstat/bindata"
 	"github.com/grokstat/grokstat/models"
@@ -182,7 +183,6 @@ func PrintJsonResponse(output interface{}, err error, flags InputData) {
 
 func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
 	output = []models.ServerEntry{}
-	var wg sync.WaitGroup
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
 	var serverHosts []string
@@ -228,10 +228,15 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 		queryProtocol = protocol
 	}
 
-	wg.Add(len(serverHosts))
-	dataChan := make(chan models.ServerEntry, 1)
+	var dataChan channels.Channel
+	dataChan = channels.NewInfiniteChannel()
+	//dataChan := make(chan models.ServerEntry, len(serverHosts))
+
+	var wg sync.WaitGroup
+
 	for _, remoteIp := range serverHosts {
-		go func(remoteIp string, dataChan chan models.ServerEntry) {
+		wg.Add(1)
+		go func(remoteIp string, dataChan channels.Channel) {
 			defer wg.Done()
 			if remoteIp == "" {
 				return
@@ -243,6 +248,7 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 			hostname := ipMap["host"]
 			response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
 			if responseErr != nil {
+				dataChan.In() <- models.ServerEntry{Host: hostname, Status: responseErr.Error()}
 				return
 			}
 
@@ -251,20 +257,23 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 			serverEntry.Protocol = selectedQueryProtocol
 
 			if responseParseErr != nil {
+				dataChan.In() <- models.ServerEntry{Host: hostname, Status: responseParseErr.Error()}
 				return
 			}
-			dataChan <- serverEntry
+
+			serverEntry.Status = "OK"
+
+			dataChan.In() <- serverEntry
 		}(remoteIp, dataChan)
 	}
 
-	go func() {
-		defer wg.Done()
-		for v := range dataChan {
-			output = append(output, v)
-		}
-	}()
-
 	wg.Wait()
+	dataChan.Close()
+
+	for v := range dataChan.Out() {
+		vv := v.(models.ServerEntry)
+		output = append(output, vv)
+	}
 
 	return output, err
 }
