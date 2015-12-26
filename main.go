@@ -10,6 +10,7 @@ grokstat uses JSON input instead of command line flags. The JSON input is struct
 	custom-config-path - path of custom config file to be used
 */
 package main
+//go:generate go-bindata -o "bindata/bindata.go" -pkg "bindata" "data/..."
 
 import (
 	"bufio"
