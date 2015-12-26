@@ -13,6 +13,7 @@ type ProtocolEntryBase struct {
 
 // Server query protocol entry defining grokstat's behavior
 type ProtocolEntry struct {
+	Id          string
 	Base        ProtocolEntryBase
 	Information ProtocolEntryInfo
 }

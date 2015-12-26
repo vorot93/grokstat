@@ -181,6 +181,45 @@ func PrintJsonResponse(output interface{}, err error, flags InputData) {
 	fmt.Println(jsonOut)
 }
 
+func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan chan string, dataChan chan models.ServerEntry, wg *sync.WaitGroup) {
+	defer func() { wg.Done() }()
+	for {
+		remoteIp, workAvailable := <-remoteIpChan
+
+		if workAvailable != true {
+			return
+		}
+
+		if remoteIp == "" {
+			continue
+		}
+
+		var response []byte
+		var responseErr error
+		ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
+		hostname := ipMap["host"]
+		response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
+		if responseErr != nil {
+			dataChan <- models.ServerEntry{Host: hostname, Status: 503, Message: responseErr.Error()}
+			continue
+		}
+
+		serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(response, queryProtocol.Information)
+		serverEntry.Host = hostname
+		serverEntry.Protocol = queryProtocol.Id
+
+		if responseParseErr != nil {
+			dataChan <- models.ServerEntry{Host: hostname, Status: 500, Message: responseParseErr.Error()}
+			continue
+		}
+
+		serverEntry.Status = 200
+		serverEntry.Message = "OK"
+
+		dataChan <- serverEntry
+	}
+}
+
 func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
 	output = []models.ServerEntry{}
 	var selectedQueryProtocol string
@@ -233,48 +272,9 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	dataChan := make(chan models.ServerEntry, 10000)
 	remoteIpChan := make(chan string)
 
-	queryWorker := func(workerId int, remoteIpChan chan string, dataChan chan models.ServerEntry) {
-		defer wg.Done()
-		for {
-			remoteIp, workAvailable := <-remoteIpChan
-
-			if workAvailable != true {
-				return
-			}
-
-			if remoteIp == "" {
-				continue
-			}
-
-			var response []byte
-			var responseErr error
-			ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
-			hostname := ipMap["host"]
-			response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
-			if responseErr != nil {
-				dataChan <- models.ServerEntry{Host: hostname, Status: 503, Message: responseErr.Error()}
-				continue
-			}
-
-			serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(response, queryProtocol.Information)
-			serverEntry.Host = hostname
-			serverEntry.Protocol = selectedQueryProtocol
-
-			if responseParseErr != nil {
-				dataChan <- models.ServerEntry{Host: hostname, Status: 500, Message: responseParseErr.Error()}
-				continue
-			}
-
-			serverEntry.Status = 200
-			serverEntry.Message = "OK"
-
-			dataChan <- serverEntry
-		}
-	}
-
 	for i := 0; i < workerNum; i++ {
 		wg.Add(1)
-		go queryWorker(i, remoteIpChan, dataChan)
+		go QueryWorker(i, queryProtocol, remoteIpChan, dataChan, &wg)
 		time.Sleep(10 * time.Millisecond)
 	}
 
