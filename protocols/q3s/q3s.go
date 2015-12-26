@@ -61,6 +61,20 @@ func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (mode
     hostName, _ := rules["hostname"]
     entry.Name = strings.TrimSpace(hostName)
 
+    terrain, _ := rules["mapname"]
+    entry.Terrain = strings.TrimSpace(terrain)
+
+    game, gameOk := rules["game"]
+    if gameOk {
+    entry.ModName = strings.TrimSpace(game)
+    } else {
+        gamename, _ := rules["gamename"]
+        entry.ModName = strings.TrimSpace(gamename)
+    }
+
+    gameType, _ := rules["gametype"]
+    entry.GameType = strings.TrimSpace(gameType)
+
     numClients, nc_ok := rules["clients"]
     if nc_ok {entry.NumClients, _ = strconv.ParseInt(strings.TrimSpace(numClients), 10, 64)}
 

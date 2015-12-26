@@ -10,6 +10,7 @@ grokstat uses JSON input instead of command line flags. The JSON input is struct
 	custom-config-path - path of custom config file to be used
 */
 package main
+
 //go:generate go-bindata -o "bindata/bindata.go" -pkg "bindata" "data/..."
 
 import (
@@ -30,6 +31,7 @@ import (
 	"github.com/grokstat/grokstat/bindata"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols"
+	"github.com/grokstat/grokstat/util"
 )
 
 type InputData struct {
@@ -47,12 +49,13 @@ type JsonResponse struct {
 	Version string      `json:"version"`
 	Status  int         `json:"status"`
 	Message string      `json:"message"`
+	Flags   InputData   `json:"input-flags"`
 	Output  interface{} `json:"output"`
 }
 
 // Forms a JSON string out of Grokstat output.
-func FormJsonResponse(output interface{}, err error) (string, error) {
-	result := JsonResponse{Version: VERSION}
+func FormJsonResponse(output interface{}, err error, flags InputData) (string, error) {
+	result := JsonResponse{Version: VERSION, Flags: flags}
 
 	if err != nil {
 		result.Output = `{}`
@@ -156,7 +159,7 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry) {
+func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
 	var outputMapProtocols []models.ProtocolEntryInfo
 	for _, v := range protocolCmdMap {
 		outputMapProtocols = append(outputMapProtocols, v.Information)
@@ -165,24 +168,20 @@ func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry) {
 	output := make(map[string]interface{})
 	output["protocols"] = outputMapProtocols
 
-	jsonOut, _ := FormJsonResponse(output, nil)
-
-	fmt.Println(string(jsonOut))
+	PrintJsonResponse(output, nil, flags)
 }
 
-func PrintError(err error) {
-	output := ""
-	jsonOut, _ := FormJsonResponse(output, err)
-	fmt.Println(jsonOut)
-	return
+func PrintError(err error, flags InputData) {
+	PrintJsonResponse(nil, err, flags)
 }
 
-func PrintJsonResponse(output interface{}, err error) {
-	jsonOut, _ := FormJsonResponse(output, err)
+func PrintJsonResponse(output interface{}, err error, flags InputData) {
+	jsonOut, _ := FormJsonResponse(output, err, flags)
 	fmt.Println(jsonOut)
 }
 
 func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
+	output = []models.ServerEntry{}
 	var wg sync.WaitGroup
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
@@ -190,10 +189,16 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 
 	protocol, p_ok := protocolCmdMap[selectedProtocol]
 	if p_ok == false {
-		PrintError(errors.New("Invalid protocol specified."))
-		return
+		return []models.ServerEntry{}, errors.New("Invalid protocol specified.")
 	}
 	if protocol.Base.IsMaster {
+		var q_ok bool
+		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
+		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
+		if q_ok == false {
+			return []models.ServerEntry{}, errors.New("Invalid query part attached to master protocol.")
+		}
+
 		var serverList []string
 		for _, masterIp := range hosts {
 			if masterIp == "" {
@@ -217,14 +222,7 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 				serverList = append(serverList, dataEntry)
 			}
 		}
-		serverHosts = serverList
-		var q_ok bool
-		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
-		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
-		if q_ok == false {
-			PrintError(errors.New("Invalid query part attached to master protocol."))
-			return
-		}
+		serverHosts = util.RemoveDuplicates(serverList)
 	} else {
 		serverHosts = hosts
 		queryProtocol = protocol
@@ -282,11 +280,11 @@ func main() {
 	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
 	if jsonErr != nil {
-		PrintError(jsonErr)
+		PrintError(jsonErr, jsonFlags)
 		return
 	}
 
-	hosts := jsonFlags.Hosts
+	hosts := util.RemoveDuplicates(jsonFlags.Hosts)
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
@@ -294,14 +292,14 @@ func main() {
 	if customConfigPath == "" {
 		configBinData, err := bindata.Asset(DefaultConfigBinPath)
 		if err != nil {
-			PrintError(errors.New("Default config file not found."))
+			PrintError(errors.New("Default config file not found."), jsonFlags)
 			return
 		}
 		toml.Decode(string(configBinData), &configInstance)
 	} else {
 		_, err := toml.DecodeFile(customConfigPath, &configInstance)
 		if err != nil {
-			PrintError(errors.New("Error loading custom config file."))
+			PrintError(errors.New("Error loading custom config file."), jsonFlags)
 			return
 		}
 	}
@@ -309,25 +307,25 @@ func main() {
 	protocolCmdMap := protocols.MakeProtocolMap(configInstance.Protocols)
 
 	if showProtocols {
-		PrintProtocols(protocolCmdMap)
+		PrintProtocols(protocolCmdMap, jsonFlags)
 		return
 	}
 
 	if selectedProtocol == "" {
-		PrintError(errors.New("Please specify the protocol."))
+		PrintError(errors.New("Please specify the protocol."), jsonFlags)
 		return
 	}
 	if len(hosts) == 0 {
-		PrintError(errors.New("No hosts specified."))
+		PrintError(errors.New("No hosts specified."), jsonFlags)
 		return
 	}
 
 	data, err := Query(selectedProtocol, protocolCmdMap, hosts)
 
 	if err != nil {
-		PrintError(err)
+		PrintError(err, jsonFlags)
 		return
 	} else {
-		PrintJsonResponse(map[string]interface{}{"servers": data}, err)
+		PrintJsonResponse(map[string]interface{}{"servers": data}, err, jsonFlags)
 	}
 }

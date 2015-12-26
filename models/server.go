@@ -7,9 +7,12 @@ type PlayerEntry struct {
 }
 
 type ServerEntry struct {
+	Protocol   string `json:"protocol"`
 	Host       string `json:"host"`
 	Name       string `json:"name"`
-	Protocol   string `json:"protocol"`
+	ModName    string `json:"modname"`
+	GameType   string `json:"gametype"`
+	Terrain    string `json:"terrain"`
 	NumClients int64  `json:"numclients"`
 	MaxClients int64  `json:"maxclients"`
 	Secure     bool   `json:"secure"`
