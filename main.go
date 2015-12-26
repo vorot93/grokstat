@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/eapache/channels"
 
 	"github.com/grokstat/grokstat/bindata"
 	"github.com/grokstat/grokstat/models"
@@ -39,6 +38,7 @@ type InputData struct {
 	Hosts            []string `json:"hosts"`
 	Protocol         string   `json:"protocol"`
 	ShowProtocols    bool     `json:"show-protocols"`
+	QueryPoolSize    int      `json:"query-pool-size"`
 	CustomConfigPath string   `json:"custom-config-path"`
 }
 
@@ -181,7 +181,7 @@ func PrintJsonResponse(output interface{}, err error, flags InputData) {
 	fmt.Println(jsonOut)
 }
 
-func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
+func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
 	output = []models.ServerEntry{}
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
@@ -228,18 +228,22 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 		queryProtocol = protocol
 	}
 
-	var dataChan channels.Channel
-	dataChan = channels.NewInfiniteChannel()
-	//dataChan := make(chan models.ServerEntry, len(serverHosts))
-
 	var wg sync.WaitGroup
 
-	for _, remoteIp := range serverHosts {
-		wg.Add(1)
-		go func(remoteIp string, dataChan channels.Channel) {
-			defer wg.Done()
-			if remoteIp == "" {
+	dataChan := make(chan models.ServerEntry, 10000)
+	remoteIpChan := make(chan string)
+
+	queryWorker := func(workerId int, remoteIpChan chan string, dataChan chan models.ServerEntry) {
+		defer wg.Done()
+		for {
+			remoteIp, workAvailable := <-remoteIpChan
+
+			if workAvailable != true {
 				return
+			}
+
+			if remoteIp == "" {
+				continue
 			}
 
 			var response []byte
@@ -248,8 +252,8 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 			hostname := ipMap["host"]
 			response, responseErr = QueryServer(queryProtocol.Base.HttpProtocol, hostname, queryProtocol.Base.MakeRequestPacketFunc(queryProtocol.Information))
 			if responseErr != nil {
-				dataChan.In() <- models.ServerEntry{Host: hostname, Status: responseErr.Error()}
-				return
+				dataChan <- models.ServerEntry{Host: hostname, Status: responseErr.Error()}
+				continue
 			}
 
 			serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(response, queryProtocol.Information)
@@ -257,22 +261,33 @@ func Query(selectedProtocol string, protocolCmdMap map[string]models.ProtocolEnt
 			serverEntry.Protocol = selectedQueryProtocol
 
 			if responseParseErr != nil {
-				dataChan.In() <- models.ServerEntry{Host: hostname, Status: responseParseErr.Error()}
-				return
+				dataChan <- models.ServerEntry{Host: hostname, Status: responseParseErr.Error()}
+				continue
 			}
 
 			serverEntry.Status = "OK"
 
-			dataChan.In() <- serverEntry
-		}(remoteIp, dataChan)
+			dataChan <- serverEntry
+		}
 	}
 
-	wg.Wait()
-	dataChan.Close()
+	for i := 0; i < workerNum; i++ {
+		wg.Add(1)
+		go queryWorker(i, remoteIpChan, dataChan)
+	}
 
-	for v := range dataChan.Out() {
-		vv := v.(models.ServerEntry)
-		output = append(output, vv)
+	for _, host := range serverHosts {
+		remoteIpChan <- host
+	}
+
+	close(remoteIpChan)
+
+	wg.Wait()
+
+	close(dataChan)
+
+	for v := range dataChan {
+		output = append(output, v)
 	}
 
 	return output, err
@@ -297,6 +312,10 @@ func main() {
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
+	queryPoolSize := 30
+	if jsonFlags.QueryPoolSize > 0 && jsonFlags.QueryPoolSize < 200 {
+		queryPoolSize = jsonFlags.QueryPoolSize
+	}
 
 	if customConfigPath == "" {
 		configBinData, err := bindata.Asset(DefaultConfigBinPath)
@@ -329,7 +348,7 @@ func main() {
 		return
 	}
 
-	data, err := Query(selectedProtocol, protocolCmdMap, hosts)
+	data, err := Query(queryPoolSize, selectedProtocol, protocolCmdMap, hosts)
 
 	if err != nil {
 		PrintError(err, jsonFlags)
