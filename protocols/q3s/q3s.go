@@ -75,12 +75,21 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 		return models.ServerEntry{}, errors.New("Invalid response prelude.")
 	}
 
-	responseBody := response[len(responsePrelude):]
+	responseBody := bytes.Trim(response[len(responsePrelude):], string(splitterBody))
+	responseBodySplit := bytes.Split(responseBody, splitterBody)
 
-	ruleString := bytes.Split(responseBody, splitterBody)[1]
-	playerByteArray := bytes.Split(responseBody, splitterBody)[2:]
+	rulePlayerBoundary := len(responseBodySplit)
+	for i, line := range responseBodySplit {
+		if line[0] != splitterRules[0] {
+			rulePlayerBoundary = i
+			break
+		}
+	}
 
-	ruleStringSplit := bytes.Split(ruleString, splitterRules)
+	ruleByteArray := bytes.Join(responseBodySplit[:rulePlayerBoundary], splitterRules)
+	playerByteArray := responseBodySplit[rulePlayerBoundary:]
+
+	ruleByteArraySplit := bytes.Split(ruleByteArray, splitterRules)
 
 	players, playerErr := parsePlayerstring(playerByteArray)
 	if playerErr != nil {
@@ -88,7 +97,7 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	}
 	entry.Players = players
 
-	rules, ruleErr := parseRulestring(ruleStringSplit)
+	rules, ruleErr := parseRulestring(ruleByteArraySplit)
 	if ruleErr != nil {
 		return models.ServerEntry{}, errors.New("Invalid rule string.")
 	}
