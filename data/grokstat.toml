@@ -20,6 +20,7 @@ Id = "xonoticm"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Xonotic Master"
+MasterOf = "q3s"
 RequestPreludeTemplate = "{{.PreludeStarter}}getservers Xonotic {{.Version}} empty full"
 Version = "3"
 
@@ -28,6 +29,7 @@ Id = "etm"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Wolfenstein: Enemy Territory Master"
+MasterOf = "q3s"
 Version = "84"
 
 [[Protocols]]
@@ -35,6 +37,7 @@ Id = "warsowm"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Warsow Master"
+MasterOf = "q3s"
 RequestPreludeTemplate = "{{.PreludeStarter}}getservers Warsow {{.Version}} empty full"
 Version = "20"
 
@@ -43,6 +46,7 @@ Id = "unvanquishedm"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Unvanquished Master"
+MasterOf = "q3s"
 Version = "86"
 
 [[Protocols]]
@@ -50,6 +54,7 @@ Id = "openarenam"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "OpenArena Master"
+MasterOf = "q3s"
 Version = "71"
 
 [[Protocols]]
@@ -57,6 +62,7 @@ Id = "sof2m"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Soldier of Fortune 2 Master"
+MasterOf = "sof2s"
 Version = "2004"
 RequestQueryParams = "SOF2FULL"
 DefaultRequestPort = "20110"
