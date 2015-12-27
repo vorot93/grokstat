@@ -59,7 +59,7 @@ func FormJsonResponse(output interface{}, err error, flags InputData) (string, e
 	result := JsonResponse{Version: VERSION, Flags: flags}
 
 	if err != nil {
-		result.Output = `{}`
+		result.Output = make(map[string]interface{})
 		result.Status = 500
 		result.Message = err.Error()
 	} else {
