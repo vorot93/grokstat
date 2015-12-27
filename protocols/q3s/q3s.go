@@ -11,9 +11,9 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
-func MakeRequestPacket(protocolInfo models.ProtocolEntryInfo) []byte {
+func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) models.Packet {
 	templ, _ := protocolInfo["RequestPreludeTemplate"]
-	return []byte(util.ParseTemplate(templ, protocolInfo))
+	return models.Packet{Data: []byte(util.ParseTemplate(templ, protocolInfo))}
 }
 
 func parsePlayerstring(playerByteArray [][]byte) (playerArray []models.PlayerEntry, err error) {
@@ -57,7 +57,12 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 }
 
 // Parses the response from Quake III Arena server
-func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
+func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
+    responsePacket, rpm_ok := responsePacketMap["status"]
+    if !rpm_ok {
+        return models.ServerEntry{}, errors.New("No status response.")
+    }
+    response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
 	responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
@@ -89,6 +94,9 @@ func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) (mode
 	}
 	hostName, _ := rules["sv_hostname"]
 	entry.Name = strings.TrimSpace(hostName)
+
+    needPass, _ := rules["g_needpass"]
+    entry.NeedPass, _ = strconv.ParseBool(needPass)
 
 	terrain, _ := rules["mapname"]
 	entry.Terrain = strings.TrimSpace(terrain)

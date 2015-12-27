@@ -12,6 +12,7 @@ type ServerEntry struct {
 	Message    string            `json:"message"`
 	Host       string            `json:"host"`
 	Name       string            `json:"name"`
+	NeedPass   bool              `json:"need-pass"`
 	ModName    string            `json:"modname"`
 	GameType   string            `json:"gametype"`
 	Terrain    string            `json:"terrain"`

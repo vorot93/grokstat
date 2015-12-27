@@ -3,12 +3,13 @@ package models
 type ProtocolEntryInfo map[string]string
 
 type ProtocolEntryBase struct {
-	IsMaster                bool                                                 `json:"is_master"`
-	MakeRequestPacketFunc   func(ProtocolEntryInfo) []byte                       `json:"-"`
-	MasterResponseParseFunc func([]byte, ProtocolEntryInfo) ([]string, error)    `json:"-"`
-	ServerResponseParseFunc func([]byte, ProtocolEntryInfo) (ServerEntry, error) `json:"-"`
-	HttpProtocol            string                                               `json:"http_protocol"`
-	ResponseType            string                                               `json:"response_type"`
+	IsMaster                bool                                                            `json:"is_master"`
+	MakeRequestPacketFunc   func(string, ProtocolEntryInfo) Packet                          `json:"-"`
+	RequestPackets          []string                                                        `json:"-"`
+	MasterResponseParseFunc func(map[string]Packet, ProtocolEntryInfo) ([]string, error)    `json:"-"`
+	ServerResponseParseFunc func(map[string]Packet, ProtocolEntryInfo) (ServerEntry, error) `json:"-"`
+	HttpProtocol            string                                                          `json:"http_protocol"`
+	ResponseType            string                                                          `json:"response_type"`
 }
 
 // Server query protocol entry defining grokstat's behavior

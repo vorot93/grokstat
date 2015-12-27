@@ -9,9 +9,9 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
-func MakeRequestPacket(protocolInfo models.ProtocolEntryInfo) []byte {
+func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) models.Packet {
 	templ, _ := protocolInfo["RequestPreludeTemplate"]
-	return []byte(util.ParseTemplate(templ, protocolInfo))
+	return models.Packet{Data: []byte(util.ParseTemplate(templ, protocolInfo))}
 }
 
 func parseMasterServerEntry(entryRaw []byte) string {
@@ -35,7 +35,9 @@ func parseMasterServerEntry(entryRaw []byte) string {
 }
 
 // Parses the response from Quake III Arena master server.
-func ParseResponse(response []byte, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
+func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
+	responsePacket := responsePacketMap["servers"]
+	response := responsePacket.Data
     responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
     responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
