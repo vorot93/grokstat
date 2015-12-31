@@ -17,7 +17,7 @@ func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) m
 }
 
 func parsePlayerstring(playerByteArray [][]byte) (playerArray []models.PlayerEntry, err error) {
-    playerArray = make([]models.PlayerEntry, 0, 0)
+	playerArray = make([]models.PlayerEntry, 0, 0)
 	for _, playerByteEntry := range playerByteArray {
 		byteEntrySplit := bytes.Split(playerByteEntry, []byte(" "))
 		if len(byteEntrySplit) < 3 {
@@ -58,18 +58,19 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 
 // Parses the response from Quake III Arena server
 func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
-    responsePacket, rpm_ok := responsePacketMap["status"]
-    if !rpm_ok {
-        return models.ServerEntry{}, errors.New("No status response.")
-    }
-    response := responsePacket.Data
+	responsePacket, rpm_ok := responsePacketMap["status"]
+	if !rpm_ok {
+		return models.ServerEntry{}, errors.New("No status response.")
+	}
+	packetPing := responsePacket.Ping
+	response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
 	responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
 	splitterBody := []byte{0xa}
 	splitterRules := []byte{0x5c}
 
-	entry := models.ServerEntry{}
+	entry := models.ServerEntry{Ping: packetPing}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
 		return models.ServerEntry{}, errors.New("Invalid response prelude.")
@@ -104,8 +105,8 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	hostName, _ := rules["sv_hostname"]
 	entry.Name = strings.TrimSpace(hostName)
 
-    needPass, _ := rules["g_needpass"]
-    entry.NeedPass, _ = strconv.ParseBool(needPass)
+	needPass, _ := rules["g_needpass"]
+	entry.NeedPass, _ = strconv.ParseBool(needPass)
 
 	terrain, _ := rules["mapname"]
 	entry.Terrain = strings.TrimSpace(terrain)

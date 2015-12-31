@@ -120,15 +120,18 @@ func GetServerResponse(httpProtocol string, addr string, requestPacket models.Pa
 		if connection_err != nil {
 			return models.Packet{Id: packetId}, connection_err
 		}
-		conn.Write(requestPacket.Data)
 		buf_len := 16777215
 		buf := make([]byte, buf_len)
-		conn.SetDeadline(time.Now().Add(time.Duration(5) * time.Second))
-		conn.ReadFromUDP(buf)
+		sendtime := time.Now()
+		conn.Write(requestPacket.Data)
+		conn.SetReadDeadline(time.Now().Add(time.Duration(5) * time.Second))
+		_, _, err = conn.ReadFromUDP(buf)
+		recvtime := time.Now()
+		ping := (recvtime.UnixNano() - sendtime.UnixNano()) / int64(1*time.Millisecond)
 		if err != nil {
-			return models.Packet{}, err
+			return models.Packet{Id: packetId}, err
 		} else {
-			responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId}
+			responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId, Ping: ping}
 			if len(responsePacket.Data) == 0 {
 				err = emptyResponse
 			}
