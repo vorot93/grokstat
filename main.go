@@ -332,7 +332,7 @@ func main() {
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
-	queryPoolSize := 30
+	queryPoolSize := DEFAULT_QUERY_POOL_SIZE
 	if jsonFlags.QueryPoolSize > 0 && jsonFlags.QueryPoolSize < 200 {
 		queryPoolSize = jsonFlags.QueryPoolSize
 	}
