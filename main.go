@@ -34,6 +34,12 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
+type ServerResponseStruct struct {
+	Hostname    string
+	ResponseMap map[string]models.Packet
+	ResponseErr error
+}
+
 type InputData struct {
 	Hosts            []string `json:"hosts"`
 	Protocol         string   `json:"protocol"`
@@ -183,37 +189,25 @@ func PrintJsonResponse(output interface{}, err error, flags InputData) {
 	fmt.Println(jsonOut)
 }
 
-func QueryWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) models.ServerEntry {
+func RequestWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) ServerResponseStruct {
+	responseMap := make(map[string]models.Packet)
 	ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
 	hostname := ipMap["host"]
-	responseMap := make(map[string]models.Packet)
-	var responseErr error
+	var err error
 	for _, packetId := range queryProtocol.Base.RequestPackets {
+		requestPacket := queryProtocol.Base.MakeRequestPacketFunc(packetId, queryProtocol.Information)
+		var responseErr error
+		responseMap[packetId], responseErr = GetServerResponse(queryProtocol.Base.HttpProtocol, hostname, requestPacket)
 		if responseErr != nil {
+			responseMap = make(map[string]models.Packet)
+			err = responseErr
 			break
 		}
-		requestPacket := queryProtocol.Base.MakeRequestPacketFunc(packetId, queryProtocol.Information)
-		responseMap[packetId], responseErr = GetServerResponse(queryProtocol.Base.HttpProtocol, hostname, requestPacket)
 	}
-	if responseErr != nil {
-		return models.ServerEntry{Host: hostname, Status: 503, Message: responseErr.Error()}
-	}
-
-	serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(responseMap, queryProtocol.Information)
-	serverEntry.Host = hostname
-	serverEntry.Protocol = queryProtocol.Id
-
-	if responseParseErr != nil {
-		return models.ServerEntry{Host: hostname, Status: 500, Message: responseParseErr.Error()}
-	}
-
-	serverEntry.Status = 200
-	serverEntry.Message = "OK"
-
-	return serverEntry
+	return ServerResponseStruct{Hostname: hostname, ResponseMap: responseMap, ResponseErr: err}
 }
 
-func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan chan string, dataChan chan models.ServerEntry, wg *sync.WaitGroup) {
+func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan chan string, dataChan chan ServerResponseStruct, wg *sync.WaitGroup) {
 	defer func() { wg.Done() }()
 	for {
 		remoteIp, workAvailable := <-remoteIpChan
@@ -226,10 +220,21 @@ func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan 
 			continue
 		}
 
-		serverEntry := QueryWorkerCore(queryProtocol, remoteIp)
-
-		dataChan <- serverEntry
+		dataChan <- RequestWorkerCore(queryProtocol, remoteIp)
 	}
+}
+
+func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string]models.Packet) models.ServerEntry {
+	serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(responseMap, queryProtocol.Information)
+
+	if responseParseErr != nil {
+		return models.ServerEntry{Status: 500, Message: responseParseErr.Error()}
+	}
+
+	serverEntry.Status = 200
+	serverEntry.Message = "OK"
+
+	return serverEntry
 }
 
 func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
@@ -287,7 +292,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 
 	var wg sync.WaitGroup
 
-	dataChan := make(chan models.ServerEntry, 10000)
+	dataChan := make(chan ServerResponseStruct, len(serverHosts))
 	remoteIpChan := make(chan string)
 
 	for i := 0; i < workerNum; i++ {
@@ -306,8 +311,17 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 
 	close(dataChan)
 
-	for v := range dataChan {
-		output = append(output, v)
+	for response := range dataChan {
+		var serverEntry models.ServerEntry
+		responseErr := response.ResponseErr
+		if responseErr == nil {
+			serverEntry = ParserWorkerCore(queryProtocol, response.Hostname, response.ResponseMap)
+		} else {
+			serverEntry = models.ServerEntry{Status: 503, Message: responseErr.Error()}
+		}
+		serverEntry.Hostname = hostname
+		serverEntry.Protocol = queryProtocol.Id
+		output = append(output, serverEntry)
 	}
 
 	return output, err
