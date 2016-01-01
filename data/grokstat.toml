@@ -9,6 +9,19 @@ Id = "q3s"
 Template = "Q3S"
 
 [[Protocols]]
+Id = "q2m"
+Template = "Q3M"
+[Protocols.Overrides]
+MasterOf = "q2s"
+
+[[Protocols]]
+Id = "q2s"
+Template = "Q3S"
+[Protocols.Overrides]
+RequestPreludeTemplate = "{{.PreludeStarter}}status {{.Challenge}}"
+ResponsePreludeTemplate = "{{.PreludeStarter}}print"
+
+[[Protocols]]
 Id = "sof2s"
 Template = "Q3S"
 [Protocols.Overrides]
