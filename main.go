@@ -47,6 +47,7 @@ type InputData struct {
 	Protocol         string   `json:"protocol"`
 	ShowProtocols    bool     `json:"show-protocols"`
 	QueryPoolSize    int      `json:"query-pool-size"`
+	FullMasterQuery  bool     `json:"full-master-query"`
 	EnableStdout     bool     `json:"enable-stdout"`
 	CustomConfigPath string   `json:"custom-config-path"`
 }
@@ -240,27 +241,20 @@ func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string
 	return serverEntry
 }
 
-func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, StdoutEnable bool) (output []models.ServerEntry, err error) {
+func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, fullMasterQuery bool, StdoutEnable bool) (serverHosts []string, output []models.ServerEntry, err error) {
 	output = []models.ServerEntry{}
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
-	var serverHosts []string
 
 	protocol, p_ok := protocolCmdMap[selectedProtocol]
 	if p_ok == false {
-		return []models.ServerEntry{}, errors.New("Invalid protocol specified.")
+		return []string{}, []models.ServerEntry{}, errors.New("Invalid protocol specified.")
 	}
 
-	masterCallActive := make(chan struct{})
-	fmt.Print("Fetching server list")
-	go util.PrintWait(StdoutEnable, 250, masterCallActive)
 	if protocol.Base.IsMaster {
-		var q_ok bool
-		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
-		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
-		if q_ok == false {
-			return []models.ServerEntry{}, errors.New("Invalid query part attached to master protocol.")
-		}
+		masterCallActive := make(chan struct{})
+		util.Print(StdoutEnable, "Fetching server list")
+		go util.PrintWait(StdoutEnable, 250, masterCallActive)
 
 		var serverList []string
 		for _, masterIp := range hosts {
@@ -292,12 +286,25 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 			}
 		}
 		serverHosts = util.RemoveDuplicates(serverList)
+		close(masterCallActive)
+		util.PrintEmptyLine(StdoutEnable)
 	} else {
 		serverHosts = hosts
+	}
+
+	if protocol.Base.IsMaster {
+		if fullMasterQuery == false {
+			return serverHosts, output, err
+		}
+		var q_ok bool
+		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
+		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
+		if q_ok == false {
+			return []string{}, []models.ServerEntry{}, errors.New("Invalid query part attached to master protocol.")
+		}
+	} else {
 		queryProtocol = protocol
 	}
-	close(masterCallActive)
-	util.PrintEmptyLine(StdoutEnable)
 
 	var queryWg sync.WaitGroup
 
@@ -346,7 +353,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	}
 	util.PrintEmptyLine(StdoutEnable)
 
-	return output, err
+	return serverHosts, output, err
 }
 
 func main() {
@@ -356,7 +363,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	text, _ := reader.ReadString('\n')
 
-	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, QueryPoolSize: -1, EnableStdout: false}
+	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, QueryPoolSize: -1, FullMasterQuery: true, EnableStdout: false}
 	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
 	if jsonErr != nil {
@@ -368,6 +375,7 @@ func main() {
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
+	fullMasterQuery := jsonFlags.FullMasterQuery
 	stdoutEnabled := jsonFlags.EnableStdout
 	var queryPoolSize int
 	if jsonFlags.QueryPoolSize == -1 {
@@ -409,12 +417,12 @@ func main() {
 		return
 	}
 
-	data, err := Query(queryPoolSize, selectedProtocol, protocolCmdMap, hosts, stdoutEnabled)
+	serverList, serverData, err := Query(queryPoolSize, selectedProtocol, protocolCmdMap, hosts, fullMasterQuery, stdoutEnabled)
 
 	if err != nil {
 		PrintError(err, jsonFlags)
 		return
 	} else {
-		PrintJsonResponse(map[string]interface{}{"servers": data}, err, jsonFlags)
+		PrintJsonResponse(map[string]interface{}{"server-list": serverList, "servers": serverData}, err, jsonFlags)
 	}
 }

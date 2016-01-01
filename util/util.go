@@ -28,6 +28,13 @@ func RemoveDuplicates(ListA []string) []string {
 	return ListB
 }
 
+func Print(enabled bool, data interface{}) {
+	if enabled != true {
+		return
+	}
+	fmt.Print(data)
+}
+
 func PrintWait(enabled bool, interval int, active chan struct{}) {
 	if enabled != true {
 		return
