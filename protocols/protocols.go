@@ -25,7 +25,11 @@ func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntr
 		templateId := configEntry.Template
 		overrides := configEntry.Overrides
 
-		protocolEntry := models.MakeProtocolEntry(templates[templateId])
+		entryTemplate, eOk := templates[templateId]
+		if eOk == false {
+			continue
+		}
+		protocolEntry := models.MakeProtocolEntry(entryTemplate)
 		for k, v := range overrides {
 			protocolEntry.Information[k] = v
 		}
