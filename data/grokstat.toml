@@ -66,3 +66,13 @@ MasterOf = "sof2s"
 Version = "2004"
 RequestQueryParams = "SOF2FULL"
 DefaultRequestPort = "20110"
+
+[[Protocols]]
+Id = "teeworldsm"
+Template = "TEEWORLDSM"
+[Protocols.Overrides]
+MasterOf = "teeworldss"
+
+[[Protocols]]
+Id = "teeworldss"
+Template = "TEEWORLDSS"
