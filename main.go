@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +46,7 @@ type InputData struct {
 	Protocol         string   `json:"protocol"`
 	ShowProtocols    bool     `json:"show-protocols"`
 	QueryPoolSize    int      `json:"query-pool-size"`
+	EnableStdout     bool     `json:"enable-stdout"`
 	CustomConfigPath string   `json:"custom-config-path"`
 }
 
@@ -237,7 +239,7 @@ func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string
 	return serverEntry
 }
 
-func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string) (output []models.ServerEntry, err error) {
+func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, StdoutEnable bool) (output []models.ServerEntry, err error) {
 	output = []models.ServerEntry{}
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
@@ -247,6 +249,9 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	if p_ok == false {
 		return []models.ServerEntry{}, errors.New("Invalid protocol specified.")
 	}
+
+	masterCallActive := true
+	go util.PrintWait(StdoutEnable, "Calling master", 250, &masterCallActive)
 	if protocol.Base.IsMaster {
 		var q_ok bool
 		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
@@ -289,40 +294,56 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		serverHosts = hosts
 		queryProtocol = protocol
 	}
+	masterCallActive = false
+	util.PrintEmptyLine(StdoutEnable)
 
-	var wg sync.WaitGroup
+	var queryWg sync.WaitGroup
 
 	dataChan := make(chan ServerResponseStruct, len(serverHosts))
 	remoteIpChan := make(chan string)
 
+	workerLaunchActive := true
+	go util.PrintWait(StdoutEnable, "Launching workers", 250, &workerLaunchActive)
 	for i := 0; i < workerNum; i++ {
-		wg.Add(1)
-		go QueryWorker(i, queryProtocol, remoteIpChan, dataChan, &wg)
+		queryWg.Add(1)
+		go QueryWorker(i, queryProtocol, remoteIpChan, dataChan, &queryWg)
 		time.Sleep(10 * time.Millisecond)
 	}
+	workerLaunchActive = false
+	util.PrintEmptyLine(StdoutEnable)
 
-	for _, host := range serverHosts {
+	queryMsgLen := 0
+	hostLen := int64(len(serverHosts))
+	for i, host := range serverHosts {
+		queryMsgLen = util.PrintReplace(StdoutEnable, "Querying: "+strconv.FormatInt(int64(i+1), 10)+" / "+strconv.FormatInt(hostLen, 10), queryMsgLen)
 		remoteIpChan <- host
 	}
+	util.PrintEmptyLine(StdoutEnable)
 
 	close(remoteIpChan)
 
-	wg.Wait()
+	queryWg.Wait()
 
 	close(dataChan)
 
+	responseMsgLen := 0
+	responseLen := int64(len(dataChan))
+	responseN := 0
 	for response := range dataChan {
+		responseMsgLen = util.PrintReplace(StdoutEnable, "Parsing: "+strconv.FormatInt(int64(responseN+1), 10)+" / "+strconv.FormatInt(responseLen, 10), responseMsgLen)
+		responseN += 1
 		var serverEntry models.ServerEntry
 		responseErr := response.ResponseErr
 		if responseErr == nil {
-			serverEntry = ParserWorkerCore(queryProtocol, response.Hostname, response.ResponseMap)
+			serverEntry = ParserWorkerCore(queryProtocol, response.ResponseMap)
 		} else {
 			serverEntry = models.ServerEntry{Status: 503, Message: responseErr.Error()}
 		}
-		serverEntry.Hostname = hostname
+		serverEntry.Host = response.Hostname
 		serverEntry.Protocol = queryProtocol.Id
 		output = append(output, serverEntry)
 	}
+	util.PrintEmptyLine(StdoutEnable)
 
 	return output, err
 }
@@ -334,7 +355,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	text, _ := reader.ReadString('\n')
 
-	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false}
+	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, EnableStdout: false}
 	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
 	if jsonErr != nil {
@@ -346,6 +367,7 @@ func main() {
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
+	stdoutEnabled := jsonFlags.EnableStdout
 	queryPoolSize := DEFAULT_QUERY_POOL_SIZE
 	if jsonFlags.QueryPoolSize > 0 && jsonFlags.QueryPoolSize < 200 {
 		queryPoolSize = jsonFlags.QueryPoolSize
@@ -382,7 +404,7 @@ func main() {
 		return
 	}
 
-	data, err := Query(queryPoolSize, selectedProtocol, protocolCmdMap, hosts)
+	data, err := Query(queryPoolSize, selectedProtocol, protocolCmdMap, hosts, stdoutEnabled)
 
 	if err != nil {
 		PrintError(err, jsonFlags)
