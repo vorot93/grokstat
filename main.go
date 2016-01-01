@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,7 +136,7 @@ func GetServerResponse(httpProtocol string, addr string, requestPacket models.Pa
 		conn.SetReadDeadline(time.Now().Add(time.Duration(5) * time.Second))
 		_, _, err = conn.ReadFromUDP(buf)
 		recvtime := time.Now()
-		ping := (recvtime.UnixNano() - sendtime.UnixNano()) / int64(1*time.Millisecond)
+		ping := int64(recvtime.Sub(sendtime) / time.Millisecond)
 		if err != nil {
 			return models.Packet{Id: packetId}, err
 		} else {
@@ -250,8 +251,9 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		return []models.ServerEntry{}, errors.New("Invalid protocol specified.")
 	}
 
-	masterCallActive := true
-	go util.PrintWait(StdoutEnable, "Calling master", 250, &masterCallActive)
+	masterCallActive := make(chan struct{})
+	fmt.Print("Fetching server list")
+	go util.PrintWait(StdoutEnable, 250, masterCallActive)
 	if protocol.Base.IsMaster {
 		var q_ok bool
 		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
@@ -294,7 +296,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		serverHosts = hosts
 		queryProtocol = protocol
 	}
-	masterCallActive = false
+	close(masterCallActive)
 	util.PrintEmptyLine(StdoutEnable)
 
 	var queryWg sync.WaitGroup
@@ -302,14 +304,13 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	dataChan := make(chan ServerResponseStruct, len(serverHosts))
 	remoteIpChan := make(chan string)
 
-	workerLaunchActive := true
-	go util.PrintWait(StdoutEnable, "Launching workers", 250, &workerLaunchActive)
+	workerMsgLen := 0
 	for i := 0; i < workerNum; i++ {
+		workerMsgLen = util.PrintReplace(StdoutEnable, "Launching workers: "+strconv.FormatInt(int64(i+1), 10)+" / "+strconv.FormatInt(int64(workerNum), 10), workerMsgLen)
 		queryWg.Add(1)
 		go QueryWorker(i, queryProtocol, remoteIpChan, dataChan, &queryWg)
 		time.Sleep(10 * time.Millisecond)
 	}
-	workerLaunchActive = false
 	util.PrintEmptyLine(StdoutEnable)
 
 	queryMsgLen := 0
@@ -355,7 +356,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	text, _ := reader.ReadString('\n')
 
-	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, EnableStdout: false}
+	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, QueryPoolSize: -1, EnableStdout: false}
 	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
 	if jsonErr != nil {
@@ -368,9 +369,13 @@ func main() {
 	customConfigPath := jsonFlags.CustomConfigPath
 	selectedProtocol := jsonFlags.Protocol
 	stdoutEnabled := jsonFlags.EnableStdout
-	queryPoolSize := DEFAULT_QUERY_POOL_SIZE
-	if jsonFlags.QueryPoolSize > 0 && jsonFlags.QueryPoolSize < 200 {
-		queryPoolSize = jsonFlags.QueryPoolSize
+	var queryPoolSize int
+	if jsonFlags.QueryPoolSize == -1 {
+		queryPoolSize = DEFAULT_QUERY_POOL_SIZE
+	} else {
+		queryClamp := sort.IntSlice([]int{MIN_QUERY_POOL_SIZE, jsonFlags.QueryPoolSize, MAX_QUERY_POOL_SIZE})
+		queryClamp.Sort()
+		queryPoolSize = int(queryClamp[1])
 	}
 
 	if customConfigPath == "" {

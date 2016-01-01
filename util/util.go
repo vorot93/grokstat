@@ -28,19 +28,19 @@ func RemoveDuplicates(ListA []string) []string {
 	return ListB
 }
 
-func PrintWait(enabled bool, data string, interval int, active *bool) {
+func PrintWait(enabled bool, interval int, active chan struct{}) {
 	if enabled != true {
 		return
 	}
-	os.Stdout.Write([]byte(data))
-	os.Stdout.Sync()
 	for {
-		if *active == false {
+		select {
+		default:
+			os.Stdout.Write([]byte("."))
+			os.Stdout.Sync()
+			time.Sleep(time.Duration(interval) * time.Millisecond)
+		case <-active:
 			return
 		}
-		os.Stdout.Write([]byte("."))
-		os.Stdout.Sync()
-		time.Sleep(time.Duration(interval) * time.Millisecond)
 	}
 }
 
