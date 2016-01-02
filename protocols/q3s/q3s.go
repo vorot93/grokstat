@@ -24,7 +24,7 @@ func parsePlayerstring(playerByteArray [][]byte) (playerArray []models.PlayerEnt
 			continue
 		}
 		ping, _ := strconv.ParseInt(string(byteEntrySplit[1]), 10, 64)
-		playerEntry := models.PlayerEntry{Name: string(bytes.Join(byteEntrySplit[2:], []byte(" "))), Ping: ping, Info: map[string]string{"Score": string(byteEntrySplit[0])}}
+		playerEntry := models.PlayerEntry{Name: strings.Trim(string(bytes.Join(byteEntrySplit[2:], []byte(" "))), `"`), Ping: ping, Info: map[string]string{"Score": string(byteEntrySplit[0])}}
 		playerArray = append(playerArray, playerEntry)
 	}
 	return playerArray, nil
@@ -102,11 +102,17 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	if ruleErr != nil {
 		return models.ServerEntry{}, errors.New("Invalid rule string.")
 	}
-	hostName, _ := rules["sv_hostname"]
-	entry.Name = strings.TrimSpace(hostName)
+	serverNameRule, serverNameRuleOk := protocolInfo["ServerNameRule"]
+	if serverNameRuleOk {
+		serverName, _ := rules[serverNameRule]
+		entry.Name = strings.TrimSpace(serverName)
+	}
 
-	needPass, _ := rules["g_needpass"]
-	entry.NeedPass, _ = strconv.ParseBool(needPass)
+	needPassRule, needPassRuleOk := protocolInfo["NeedPassRule"]
+	if needPassRuleOk {
+		needPass, _ := rules[needPassRule]
+		entry.NeedPass, _ = strconv.ParseBool(needPass)
+	}
 
 	terrain, _ := rules["mapname"]
 	entry.Terrain = strings.TrimSpace(terrain)

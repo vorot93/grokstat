@@ -12,6 +12,9 @@ Template = "Q3S"
 Id = "q2m"
 Template = "Q3M"
 [Protocols.Overrides]
+RequestPreludeTemplate = "query"
+ResponsePreludeTemplate = "{{.PreludeStarter}}servers{{.x20}}"
+SplitterUsed = "false"
 MasterOf = "q2s"
 
 [[Protocols]]
@@ -20,6 +23,9 @@ Template = "Q3S"
 [Protocols.Overrides]
 RequestPreludeTemplate = "{{.PreludeStarter}}status {{.Challenge}}"
 ResponsePreludeTemplate = "{{.PreludeStarter}}print"
+ServerNameRule = "hostname"
+NeedPassRule = "needpass"
+DefaultRequestPort = "27910"
 
 [[Protocols]]
 Id = "sof2s"

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/util"
@@ -15,7 +16,9 @@ func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) m
 }
 
 func parseMasterServerEntry(entryRaw []byte) string {
-	if len(entryRaw) != 6 {return ""}
+	if len(entryRaw) != 6 {
+		return ""
+	}
 
 	entry := make([]int, 6)
 	for i, v := range entryRaw {
@@ -27,7 +30,9 @@ func parseMasterServerEntry(entryRaw []byte) string {
 	d := entry[3]
 	port := entry[4]*(16*16) + entry[5]
 
-	if a == 0 {return ""}
+	if a == 0 {
+		return ""
+	}
 
 	serverEntry := fmt.Sprintf("%d.%d.%d.%d:%d", a, b, c, d, port)
 
@@ -38,9 +43,10 @@ func parseMasterServerEntry(entryRaw []byte) string {
 func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
 	responsePacket := responsePacketMap["servers"]
 	response := responsePacket.Data
-    responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
-    responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
+	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
+	responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))
 
+	splitterUsed, _ := protocolInfo["SplitterUsed"]
 	splitter := []byte{0x5c}
 
 	servers := []string{}
@@ -50,7 +56,17 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	}
 
 	responseBody := response[len(responsePrelude):]
-	responseBodySplit := bytes.Split(responseBody, splitter)
+	var responseBodySplit [][]byte
+	if splitterUsed == "true" {
+		responseBodySplit = bytes.Split(responseBody, splitter)
+	} else {
+		if math.Mod(float64(len(responseBody)), 6.0) != 0.0 {
+			return []string{}, errors.New("Invalid response length.")
+		}
+		for i := 0; i < int(len(responseBody)/6.0); i++ {
+			responseBodySplit = append(responseBodySplit, responseBody[i:i+6])
+		}
+	}
 	for _, entryRaw := range responseBodySplit {
 		serverEntry := parseMasterServerEntry(entryRaw)
 
