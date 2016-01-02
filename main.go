@@ -87,66 +87,49 @@ func FormJsonResponse(output interface{}, err error, flags InputData) (string, e
 	return string(jsonOut), jsonErr
 }
 
+func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
+	var outputMapProtocols []models.ProtocolEntryInfo
+	for _, v := range protocolCmdMap {
+		outputMapProtocols = append(outputMapProtocols, v.Information)
+	}
+
+	output := make(map[string]interface{})
+	output["protocols"] = outputMapProtocols
+
+	PrintJsonResponse(output, nil, flags)
+}
+
+func PrintError(err error, flags InputData) {
+	PrintJsonResponse(nil, err, flags)
+}
+
+func PrintJsonResponse(output interface{}, err error, flags InputData) {
+	jsonOut, _ := FormJsonResponse(output, err, flags)
+	fmt.Println(jsonOut)
+}
+
 var DefaultConfigBinPath string = "data/grokstat.toml"
 
-// A convenience function for creating UDP connections
-func newUDPConnection(addr string, protocol string) (*net.UDPConn, error) {
-	raddr, _ := net.ResolveUDPAddr("udp", addr)
-	caddr, _ := net.ResolveUDPAddr("udp", ":0")
-	conn, err := net.DialUDP(protocol, caddr, raddr)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
-}
-
-// A convenience function for creating TCP connections
-func newTCPConnection(addr string, protocol string) (*net.TCPConn, error) {
-	raddr, _ := net.ResolveTCPAddr("tcp", addr)
-	caddr, _ := net.ResolveTCPAddr("tcp", ":0")
-	conn, err := net.DialTCP(protocol, caddr, raddr)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
-}
-
-func GetServerResponse(httpProtocol string, addr string, requestPacket models.Packet) (responsePacket models.Packet, err error) {
+func GetServerResponse(conn net.Conn, requestPacket models.Packet) (responsePacket models.Packet, err error) {
 	emptyResponse := errors.New("No response from server")
 	packetId := requestPacket.Id
 
-	if httpProtocol == "tcp" {
-		conn, connection_err := newTCPConnection(addr, httpProtocol)
-		if connection_err != nil {
-			return models.Packet{Id: packetId}, connection_err
-		}
-		defer conn.Close()
-		var buf string
-		buf, err = bufio.NewReader(conn).ReadString('\n')
-		responsePacket = models.Packet{Data: []byte(buf), Id: packetId}
-	} else if httpProtocol == "udp" {
-		conn, connection_err := newUDPConnection(addr, httpProtocol)
-		defer conn.Close()
-		if connection_err != nil {
-			return models.Packet{Id: packetId}, connection_err
-		}
-		buf_len := 16777215
-		buf := make([]byte, buf_len)
-		sendtime := time.Now()
-		conn.Write(requestPacket.Data)
-		conn.SetReadDeadline(time.Now().Add(time.Duration(5) * time.Second))
-		_, _, err = conn.ReadFromUDP(buf)
-		recvtime := time.Now()
-		ping := int64(recvtime.Sub(sendtime) / time.Millisecond)
-		if err != nil {
-			return models.Packet{Id: packetId}, err
-		} else {
-			responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId, Ping: ping}
-			if len(responsePacket.Data) == 0 {
-				err = emptyResponse
-			}
+	buf_len := 16777215
+	buf := make([]byte, buf_len)
+	conn.Write(requestPacket.Data)
+	sendtime := time.Now()
+	_, err = conn.Read(buf)
+	recvtime := time.Now()
+	ping := int64(recvtime.Sub(sendtime) / time.Millisecond)
+	if err != nil {
+		return models.Packet{Id: packetId}, err
+	} else {
+		responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId, Ping: ping}
+		if len(responsePacket.Data) == 0 {
+			err = emptyResponse
 		}
 	}
+
 	return responsePacket, err
 }
 
@@ -172,40 +155,28 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
-	var outputMapProtocols []models.ProtocolEntryInfo
-	for _, v := range protocolCmdMap {
-		outputMapProtocols = append(outputMapProtocols, v.Information)
-	}
-
-	output := make(map[string]interface{})
-	output["protocols"] = outputMapProtocols
-
-	PrintJsonResponse(output, nil, flags)
-}
-
-func PrintError(err error, flags InputData) {
-	PrintJsonResponse(nil, err, flags)
-}
-
-func PrintJsonResponse(output interface{}, err error, flags InputData) {
-	jsonOut, _ := FormJsonResponse(output, err, flags)
-	fmt.Println(jsonOut)
-}
-
 func RequestWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) ServerResponseStruct {
 	responseMap := make(map[string]models.Packet)
 	ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
 	hostname := ipMap["host"]
 	var err error
-	for _, packetId := range queryProtocol.Base.RequestPackets {
-		requestPacket := queryProtocol.Base.MakeRequestPacketFunc(packetId, queryProtocol.Information)
-		var responseErr error
-		responseMap[packetId], responseErr = GetServerResponse(queryProtocol.Base.HttpProtocol, hostname, requestPacket)
-		if responseErr != nil {
-			responseMap = make(map[string]models.Packet)
-			err = responseErr
-			break
+
+	conn, connectionErr := net.Dial(queryProtocol.Base.HttpProtocol, hostname)
+	if connectionErr != nil {
+		responseMap = make(map[string]models.Packet)
+		err = connectionErr
+	} else {
+		defer conn.Close()
+		conn.SetReadDeadline(time.Now().Add(2000 * time.Millisecond))
+		for _, packetId := range queryProtocol.Base.RequestPackets {
+			requestPacket := queryProtocol.Base.MakeRequestPacketFunc(packetId, queryProtocol.Information)
+			var responseErr error
+			responseMap[packetId], responseErr = GetServerResponse(conn, requestPacket)
+			if responseErr != nil {
+				responseMap = make(map[string]models.Packet)
+				err = responseErr
+				break
+			}
 		}
 	}
 	return ServerResponseStruct{Hostname: hostname, ResponseMap: responseMap, ResponseErr: err}
@@ -261,17 +232,9 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 			if masterIp == "" {
 				continue
 			}
-			ipMap := ParseIPAddr(masterIp, protocol.Information["DefaultRequestPort"])
-			hostname := ipMap["host"]
-			responseMap := make(map[string]models.Packet)
-			var responseErr error
-			for _, packetId := range protocol.Base.RequestPackets {
-				if responseErr != nil {
-					break
-				}
-				requestPacket := protocol.Base.MakeRequestPacketFunc(packetId, protocol.Information)
-				responseMap[packetId], responseErr = GetServerResponse(protocol.Base.HttpProtocol, hostname, requestPacket)
-			}
+			response := RequestWorkerCore(protocol, masterIp)
+			responseMap := response.ResponseMap
+			responseErr := response.ResponseErr
 			if responseErr != nil {
 				continue
 			}
