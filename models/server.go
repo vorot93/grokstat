@@ -1,9 +1,9 @@
 package models
 
 type PlayerEntry struct {
-	Name string
-	Ping int64
-	Info map[string]string
+	Name string            `json:"name"`
+	Ping int64             `json:"ping"`
+	Info map[string]string `json:"info"`
 }
 
 type ServerEntry struct {
