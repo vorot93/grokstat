@@ -11,11 +11,6 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
-func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) models.Packet {
-	templ, _ := protocolInfo["RequestPreludeTemplate"]
-	return models.Packet{Data: []byte(util.ParseTemplate(templ, protocolInfo))}
-}
-
 func parsePlayerstring(playerByteArray [][]byte) (playerArray []models.PlayerEntry, err error) {
 	playerArray = make([]models.PlayerEntry, 0, 0)
 	for _, playerByteEntry := range playerByteArray {

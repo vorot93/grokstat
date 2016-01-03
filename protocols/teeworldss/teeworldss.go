@@ -11,11 +11,6 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
-func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) models.Packet {
-	templ, _ := protocolInfo["RequestPreludeTemplate"]
-	return models.Packet{Data: []byte(util.ParseTemplate(templ, protocolInfo))}
-}
-
 func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
 	if math.Mod(float64(len(playerByteArray)), float64(5)) != 0.0 {
 		return []models.PlayerEntry{}, errors.New("Invalid array length.")

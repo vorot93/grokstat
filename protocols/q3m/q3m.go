@@ -10,11 +10,6 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
-func MakeRequestPacket(packetId string, protocolInfo models.ProtocolEntryInfo) models.Packet {
-	templ, _ := protocolInfo["RequestPreludeTemplate"]
-	return models.Packet{Data: []byte(util.ParseTemplate(templ, protocolInfo))}
-}
-
 func parseMasterServerEntry(entryRaw []byte) string {
 	if len(entryRaw) != 6 {
 		return ""
