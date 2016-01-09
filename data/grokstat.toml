@@ -25,6 +25,7 @@ RequestPreludeTemplate = "{{.PreludeStarter}}status {{.Challenge}}"
 ResponsePreludeTemplate = "{{.PreludeStarter}}print"
 ServerNameRule = "hostname"
 NeedPassRule = "needpass"
+MaxClientsRule = "maxclients"
 DefaultRequestPort = "27910"
 
 [[Protocols]]

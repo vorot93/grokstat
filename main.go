@@ -17,13 +17,11 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +29,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/grokstat/grokstat/bindata"
+	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols"
 	"github.com/grokstat/grokstat/util"
@@ -75,13 +74,13 @@ func FormJsonResponse(output interface{}, err error, flags InputData) (string, e
 	} else {
 		result.Output = output
 		result.Status = 200
-		result.Message = "OK"
+		result.Message = grokstaterrors.OK.Error()
 	}
 
 	jsonOut, jsonErr := json.Marshal(result)
 
 	if jsonErr != nil {
-		jsonOut = []byte(`{}`)
+		jsonOut = []byte(`{"status": 500, "message": "JSON marshaller error."}`)
 	}
 
 	return string(jsonOut), jsonErr
@@ -111,7 +110,6 @@ func PrintJsonResponse(output interface{}, err error, flags InputData) {
 var DefaultConfigBinPath string = "data/grokstat.toml"
 
 func GetServerResponse(conn net.Conn, requestPacket models.Packet) (responsePacket models.Packet, err error) {
-	emptyResponse := errors.New("No response from server")
 	packetId := requestPacket.Id
 
 	buf_len := 16777215
@@ -122,11 +120,11 @@ func GetServerResponse(conn net.Conn, requestPacket models.Packet) (responsePack
 	recvtime := time.Now()
 	ping := int64(recvtime.Sub(sendtime) / time.Millisecond)
 	if err != nil {
-		return models.Packet{Id: packetId}, err
+		return models.Packet{Id: packetId}, grokstaterrors.ServerDown
 	} else {
 		responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId, Ping: ping}
 		if len(responsePacket.Data) == 0 {
-			err = emptyResponse
+			err = grokstaterrors.ServerDown
 		}
 	}
 
@@ -203,13 +201,12 @@ func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string
 	serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(responseMap, queryProtocol.Information)
 
 	if responseParseErr != nil {
-		return models.ServerEntry{Status: 500, Message: responseParseErr.Error()}
+		return models.ServerEntry{Status: 500, Error: responseParseErr}
+	} else {
+		serverEntry.Status = 200
+		serverEntry.Error = nil
+		return serverEntry
 	}
-
-	serverEntry.Status = 200
-	serverEntry.Message = "OK"
-
-	return serverEntry
 }
 
 func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, fullMasterQuery bool, StdoutEnable bool) (serverHosts []string, output []models.ServerEntry, err error) {
@@ -219,7 +216,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 
 	protocol, p_ok := protocolCmdMap[selectedProtocol]
 	if p_ok == false {
-		return []string{}, []models.ServerEntry{}, errors.New("Invalid protocol specified.")
+		return []string{}, []models.ServerEntry{}, grokstaterrors.InvalidProtocol
 	}
 
 	if protocol.Base.IsMaster {
@@ -263,7 +260,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
 		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
 		if q_ok == false {
-			return []string{}, []models.ServerEntry{}, errors.New("Invalid query part attached to master protocol.")
+			return []string{}, []models.ServerEntry{}, grokstaterrors.InvalidMasterOf
 		}
 	} else {
 		queryProtocol = protocol
@@ -276,7 +273,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 
 	workerMsgLen := 0
 	for i := 0; i < workerNum; i++ {
-		workerMsgLen = util.PrintReplace(StdoutEnable, "Launching workers: "+strconv.FormatInt(int64(i+1), 10)+" / "+strconv.FormatInt(int64(workerNum), 10), workerMsgLen)
+		workerMsgLen = util.PrintReplace(StdoutEnable, fmt.Sprintf("Launching workers: %d / %d", i+1, workerNum), workerMsgLen)
 		queryWg.Add(1)
 		go QueryWorker(i, queryProtocol, remoteIpChan, dataChan, &queryWg)
 		time.Sleep(10 * time.Millisecond)
@@ -286,7 +283,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	queryMsgLen := 0
 	hostLen := int64(len(serverHosts))
 	for i, host := range serverHosts {
-		queryMsgLen = util.PrintReplace(StdoutEnable, "Querying: "+strconv.FormatInt(int64(i+1), 10)+" / "+strconv.FormatInt(hostLen, 10), queryMsgLen)
+		queryMsgLen = util.PrintReplace(StdoutEnable, fmt.Sprintf("Querying: %d / %d", i+1, hostLen), queryMsgLen)
 		remoteIpChan <- host
 	}
 	util.PrintEmptyLine(StdoutEnable)
@@ -301,18 +298,26 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	responseLen := int64(len(dataChan))
 	responseN := 0
 	for response := range dataChan {
-		responseMsgLen = util.PrintReplace(StdoutEnable, "Parsing: "+strconv.FormatInt(int64(responseN+1), 10)+" / "+strconv.FormatInt(responseLen, 10), responseMsgLen)
+		responseMsgLen = util.PrintReplace(StdoutEnable, fmt.Sprintf("Parsing: %d / %d", responseN+1, responseLen), responseMsgLen)
 		responseN += 1
 		var serverEntry models.ServerEntry
 		responseErr := response.ResponseErr
 		if responseErr == nil {
 			serverEntry = ParserWorkerCore(queryProtocol, response.ResponseMap)
 		} else {
-			serverEntry = models.ServerEntry{Status: 503, Message: responseErr.Error()}
+			serverEntry = models.ServerEntry{Status: 503, Error: responseErr}
 		}
 		serverEntry.Host = response.Hostname
 		serverEntry.Protocol = queryProtocol.Id
 		output = append(output, serverEntry)
+	}
+	for i, _ := range output {
+		err := output[i].Error
+		if err != nil {
+			output[i].Message = err.Error()
+		} else {
+			output[i].Message = grokstaterrors.OK.Error()
+		}
 	}
 	util.PrintEmptyLine(StdoutEnable)
 
@@ -352,14 +357,14 @@ func main() {
 	if customConfigPath == "" {
 		configBinData, err := bindata.Asset(DefaultConfigBinPath)
 		if err != nil {
-			PrintError(errors.New("Default config file not found."), jsonFlags)
+			PrintError(grokstaterrors.NoDefaultConfig, jsonFlags)
 			return
 		}
 		toml.Decode(string(configBinData), &configInstance)
 	} else {
 		_, err := toml.DecodeFile(customConfigPath, &configInstance)
 		if err != nil {
-			PrintError(errors.New("Error loading custom config file."), jsonFlags)
+			PrintError(grokstaterrors.ErrorLoadingCustomConfig, jsonFlags)
 			return
 		}
 	}
@@ -372,11 +377,11 @@ func main() {
 	}
 
 	if selectedProtocol == "" {
-		PrintError(errors.New("Please specify the protocol."), jsonFlags)
+		PrintError(grokstaterrors.NoProtocol, jsonFlags)
 		return
 	}
 	if len(hosts) == 0 {
-		PrintError(errors.New("No hosts specified."), jsonFlags)
+		PrintError(grokstaterrors.NoHosts, jsonFlags)
 		return
 	}
 

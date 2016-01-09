@@ -2,17 +2,17 @@ package q3m
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 
+	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/util"
 )
 
-func parseMasterServerEntry(entryRaw []byte) string {
+func parseMasterServerEntry(entryRaw []byte) (string, error) {
 	if len(entryRaw) != 6 {
-		return ""
+		return "", grokstaterrors.InvalidServerEntryInMasterResponse
 	}
 
 	entry := make([]int, 6)
@@ -26,12 +26,12 @@ func parseMasterServerEntry(entryRaw []byte) string {
 	port := entry[4]*(16*16) + entry[5]
 
 	if a == 0 {
-		return ""
+		return "", grokstaterrors.InvalidServerEntryInMasterResponse
 	}
 
 	serverEntry := fmt.Sprintf("%d.%d.%d.%d:%d", a, b, c, d, port)
 
-	return serverEntry
+	return serverEntry, nil
 }
 
 // Parses the response from Quake III Arena master server.
@@ -47,7 +47,7 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	servers := []string{}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return []string{}, errors.New("Invalid response prelude.")
+		return []string{}, grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := response[len(responsePrelude):]
@@ -56,16 +56,16 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 		responseBodySplit = bytes.Split(responseBody, splitter)
 	} else {
 		if math.Mod(float64(len(responseBody)), 6.0) != 0.0 {
-			return []string{}, errors.New("Invalid response length.")
+			return []string{}, grokstaterrors.InvalidResponseLength
 		}
 		for i := 0; i < int(len(responseBody)/6.0); i++ {
 			responseBodySplit = append(responseBodySplit, responseBody[i:i+6])
 		}
 	}
 	for _, entryRaw := range responseBodySplit {
-		serverEntry := parseMasterServerEntry(entryRaw)
+		serverEntry, entryErr := parseMasterServerEntry(entryRaw)
 
-		if len(serverEntry) > 0 {
+		if entryErr == nil {
 			servers = append(servers, serverEntry)
 		}
 	}

@@ -2,17 +2,17 @@ package q3s
 
 import (
 	"bytes"
-	"errors"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/util"
 )
 
-func parsePlayerstring(playerByteArray [][]byte) (playerArray []models.PlayerEntry, err error) {
-	playerArray = make([]models.PlayerEntry, 0, 0)
+func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
+	playerArray := make([]models.PlayerEntry, 0, 0)
 	for _, playerByteEntry := range playerByteArray {
 		byteEntrySplit := bytes.Split(playerByteEntry, []byte(" "))
 		if len(byteEntrySplit) < 3 {
@@ -55,7 +55,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
 	responsePacket, rpm_ok := responsePacketMap["status"]
 	if !rpm_ok {
-		return models.ServerEntry{}, errors.New("No status response.")
+		return models.ServerEntry{}, grokstaterrors.NoStatusResponse
 	}
 	packetPing := responsePacket.Ping
 	response := responsePacket.Data
@@ -68,7 +68,7 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	entry := models.ServerEntry{Ping: packetPing}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return models.ServerEntry{}, errors.New("Invalid response prelude.")
+		return models.ServerEntry{}, grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := bytes.Trim(response[len(responsePrelude):], string(splitterBody))
@@ -89,14 +89,16 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 
 	players, playerErr := parsePlayerstring(playerByteArray)
 	if playerErr != nil {
-		return models.ServerEntry{}, errors.New("Invalid player string.")
+		return models.ServerEntry{}, playerErr
 	}
 	entry.Players = players
+	entry.NumClients = int64(len(players))
 
 	rules, ruleErr := parseRulestring(ruleByteArraySplit)
 	if ruleErr != nil {
-		return models.ServerEntry{}, errors.New("Invalid rule string.")
+		return models.ServerEntry{}, ruleErr
 	}
+	entry.Rules = rules
 	serverNameRule, serverNameRuleOk := protocolInfo["ServerNameRule"]
 	if serverNameRuleOk {
 		serverName, _ := rules[serverNameRule]
@@ -109,33 +111,37 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 		entry.NeedPass, _ = strconv.ParseBool(needPass)
 	}
 
-	terrain, _ := rules["mapname"]
-	entry.Terrain = strings.TrimSpace(terrain)
-
-	game, gameOk := rules["game"]
-	if gameOk {
-		entry.ModName = strings.TrimSpace(game)
-	} else {
-		gamename, _ := rules["gamename"]
-		entry.ModName = strings.TrimSpace(gamename)
+	terrainRule, terrainRuleOk := protocolInfo["TerrainRule"]
+	if terrainRuleOk {
+		terrain, _ := rules[terrainRule]
+		entry.Terrain = strings.TrimSpace(terrain)
 	}
 
-	gameType, _ := rules["g_gametype"]
-	entry.GameType = strings.TrimSpace(gameType)
-
-	entry.NumClients = int64(len(players))
-
-	maxClients, nc_ok := rules["sv_maxclients"]
-	if nc_ok {
-		entry.MaxClients, _ = strconv.ParseInt(strings.TrimSpace(maxClients), 10, 64)
+	modNameRule, modNameRuleOk := protocolInfo["ModNameRule"]
+	if modNameRuleOk {
+		modName, _ := rules[modNameRule]
+		entry.ModName = strings.TrimSpace(modName)
 	}
 
-	secure, nc_ok := rules["sv_punkbuster"]
-	if strings.TrimSpace(secure) == "1" {
-		entry.Secure = true
+	gameTypeRule, gameTypeRuleOk := protocolInfo["GameTypeRule"]
+	if gameTypeRuleOk {
+		gameType, _ := rules[gameTypeRule]
+		entry.GameType = strings.TrimSpace(gameType)
 	}
 
-	entry.Rules = rules
+	secureRule, secureRuleOk := protocolInfo["SecureRule"]
+	if secureRuleOk {
+		secure, _ := rules[secureRule]
+		entry.Secure, _ = strconv.ParseBool(secure)
+	}
+
+	maxClientsRule, maxClientsRuleOk := protocolInfo["MaxClientsRule"]
+	if maxClientsRuleOk {
+		maxClients, maxClientsOk := rules[maxClientsRule]
+		if maxClientsOk {
+			entry.MaxClients, _ = strconv.ParseInt(strings.TrimSpace(maxClients), 10, 64)
+		}
+	}
 
 	return entry, nil
 }

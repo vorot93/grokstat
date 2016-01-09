@@ -9,6 +9,7 @@ type PlayerEntry struct {
 type ServerEntry struct {
 	Protocol   string            `json:"protocol"`
 	Status     int               `json:"status"`
+	Error      error             `json:"-"`
 	Message    string            `json:"message"`
 	Host       string            `json:"host"`
 	Name       string            `json:"name"`

@@ -2,18 +2,18 @@ package teeworldss
 
 import (
 	"bytes"
-	"errors"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/util"
 )
 
 func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
 	if math.Mod(float64(len(playerByteArray)), float64(5)) != 0.0 {
-		return []models.PlayerEntry{}, errors.New("Invalid array length.")
+		return []models.PlayerEntry{}, grokstaterrors.InvalidPlayerStringLength
 	}
 
 	playerArray := make([]models.PlayerEntry, 0, 0)
@@ -35,7 +35,7 @@ func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
 
 func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 	if len(rulestring) < 10 {
-		return map[string]string{}, errors.New("Invalid string length")
+		return map[string]string{}, grokstaterrors.InvalidRuleStringLength
 	}
 
 	ruleMap := make(map[string]string)
@@ -58,7 +58,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
 	responsePacket, rpm_ok := responsePacketMap["info"]
 	if !rpm_ok {
-		return models.ServerEntry{}, errors.New("No info response.")
+		return models.ServerEntry{}, grokstaterrors.NoInfoResponse
 	}
 	packetPing := responsePacket.Ping
 	response := responsePacket.Data
@@ -70,7 +70,7 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	entry := models.ServerEntry{Ping: packetPing}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return models.ServerEntry{}, errors.New("Invalid response prelude.")
+		return models.ServerEntry{}, grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := bytes.Trim(response[len(responsePrelude):], string(splitterBody))
@@ -89,18 +89,18 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	}
 
 	if len(responseBodySplit) < rulePlayerBoundary {
-		return models.ServerEntry{}, errors.New("Invalid response packet length.")
+		return models.ServerEntry{}, grokstaterrors.InvalidResponseLength
 	}
 
 	players, playerErr := parsePlayerstring(playerByteArray)
 	if playerErr != nil {
-		return models.ServerEntry{}, errors.New("Invalid player string.")
+		return models.ServerEntry{}, playerErr
 	}
 	entry.Players = players
 
 	rules, ruleErr := parseRulestring(ruleByteArray)
 	if ruleErr != nil {
-		return models.ServerEntry{}, errors.New("Invalid rule string.")
+		return models.ServerEntry{}, ruleErr
 	}
 	hostName, _ := rules["name"]
 	entry.Name = strings.TrimSpace(hostName)

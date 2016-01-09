@@ -2,20 +2,20 @@ package teeworldsm
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
+	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/util"
 )
 
-func parseMasterServerEntry(entryRaw []byte) string {
+func parseMasterServerEntry(entryRaw []byte) (string, error) {
 	if len(entryRaw) != 8 {
-		return ""
+		return "", grokstaterrors.InvalidServerEntryInMasterResponse
 	}
 
 	if entryRaw[0] != byte(0xff) || entryRaw[1] != byte(0xff) {
-		return ""
+		return "", grokstaterrors.InvalidServerEntryInMasterResponse
 	}
 
 	entry := make([]int, 6)
@@ -29,12 +29,12 @@ func parseMasterServerEntry(entryRaw []byte) string {
 	port := entry[4]*(16*16) + entry[5]
 
 	if a == 0 {
-		return ""
+		return "", grokstaterrors.InvalidServerEntryInMasterResponse
 	}
 
 	serverEntry := fmt.Sprintf("%d.%d.%d.%d:%d", a, b, c, d, port)
 
-	return serverEntry
+	return serverEntry, nil
 }
 
 // Parses the response from Teeworlds master server.
@@ -49,15 +49,15 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	servers := []string{}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return []string{}, errors.New("Invalid response prelude.")
+		return []string{}, grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := response[len(responsePrelude):]
 	responseBodySplit := bytes.Split(responseBody, splitter)
 	for _, entryRaw := range responseBodySplit {
-		serverEntry := parseMasterServerEntry(entryRaw)
+		serverEntry, entryErr := parseMasterServerEntry(entryRaw)
 
-		if len(serverEntry) > 0 {
+		if entryErr == nil {
 			servers = append(servers, serverEntry)
 		}
 	}
