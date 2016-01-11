@@ -96,3 +96,13 @@ MasterOf = "teeworldss"
 [[Protocols]]
 Id = "teeworldss"
 Template = "TEEWORLDSS"
+
+[[Protocols]]
+Id = "openttdm"
+Template = "OPENTTDM"
+[Protocols.Overrides]
+MasterOf = "openttds"
+
+[[Protocols]]
+Id = "openttds"
+Template = "OPENTTDS"

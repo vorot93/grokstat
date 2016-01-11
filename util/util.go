@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"text/template"
 	"time"
 )
@@ -26,6 +27,28 @@ func RemoveDuplicates(ListA []string) []string {
 		ListB = append(ListB, entry)
 	}
 	return ListB
+}
+
+func ConvertByteArray32to8(byteArray []byte) []byte {
+	newByteArray := make([]byte, len(byteArray)*2)
+	i := 0
+	for _, v := range byteArray {
+		newByteArray[i] = v / 16
+		i += 1
+		newByteArray[i] = v - (v * (v / 16))
+		i += 1
+	}
+	return newByteArray
+}
+
+func Clamp(value, min, max int) int {
+	clamp := sort.IntSlice([]int{value, min, max})
+	clamp.Sort()
+	return clamp[1]
+}
+
+func GetByteString(byteArray []byte) string {
+	return fmt.Sprintf("%x", byteArray)
 }
 
 func Print(enabled bool, data interface{}) {
@@ -68,4 +91,16 @@ func PrintEmptyLine(enabled bool) {
 		return
 	}
 	fmt.Print("\n")
+}
+
+func ErrorOut(expectation interface{}, result interface{}) string {
+	return fmt.Sprintf("\nExpected:\n%+v\n\nReceived:\n%+v\n", expectation, result)
+}
+
+func MapComparison(A, B map[string]string) (length, keys string) {
+	length = fmt.Sprintf("Length:\nA:%d\nB:%d\n\n", len(A), len(B))
+	for k, _ := range A {
+		keys = keys + fmt.Sprintf("\nKey: %s\nA: %s\nB: %s\n", k, A[k], B[k])
+	}
+	return length, keys
 }

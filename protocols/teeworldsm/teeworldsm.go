@@ -49,7 +49,7 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	servers := []string{}
 
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return []string{}, grokstaterrors.InvalidResponsePrelude
+		return nil, grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := response[len(responsePrelude):]

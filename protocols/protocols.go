@@ -14,6 +14,8 @@ func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntr
 	templates["Q3S"] = protocoltemplates.Q3Stemplate
 	templates["TEEWORLDSM"] = protocoltemplates.TEEWORLDSMtemplate
 	templates["TEEWORLDSS"] = protocoltemplates.TEEWORLDSStemplate
+	templates["OPENTTDM"] = protocoltemplates.OPENTTDMtemplate
+	templates["OPENTTDS"] = protocoltemplates.OPENTTDStemplate
 
 	for k, _ := range templates {
 		entry := templates[k]

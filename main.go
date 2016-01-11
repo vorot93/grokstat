@@ -15,13 +15,11 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +27,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/grokstat/grokstat/bindata"
+	"github.com/grokstat/grokstat/generalhelpers"
 	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols"
@@ -64,7 +63,7 @@ type JsonResponse struct {
 }
 
 // Forms a JSON string out of Grokstat output.
-func FormJsonResponse(output interface{}, err error, flags InputData) (string, error) {
+var FormJsonResponse = func(output interface{}, err error, flags InputData) (string, error) {
 	result := JsonResponse{Version: VERSION, Flags: flags}
 
 	if err != nil {
@@ -86,7 +85,7 @@ func FormJsonResponse(output interface{}, err error, flags InputData) (string, e
 	return string(jsonOut), jsonErr
 }
 
-func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
+var PrintProtocols = func(protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
 	var outputMapProtocols []models.ProtocolEntryInfo
 	for _, v := range protocolCmdMap {
 		outputMapProtocols = append(outputMapProtocols, v.Information)
@@ -98,40 +97,18 @@ func PrintProtocols(protocolCmdMap map[string]models.ProtocolEntry, flags InputD
 	PrintJsonResponse(output, nil, flags)
 }
 
-func PrintError(err error, flags InputData) {
+var PrintError = func(err error, flags InputData) {
 	PrintJsonResponse(nil, err, flags)
 }
 
-func PrintJsonResponse(output interface{}, err error, flags InputData) {
+var PrintJsonResponse = func(output interface{}, err error, flags InputData) {
 	jsonOut, _ := FormJsonResponse(output, err, flags)
 	fmt.Println(jsonOut)
 }
 
-var DefaultConfigBinPath string = "data/grokstat.toml"
+var DefaultConfigBinPath = "data/grokstat.toml"
 
-func GetServerResponse(conn net.Conn, requestPacket models.Packet) (responsePacket models.Packet, err error) {
-	packetId := requestPacket.Id
-
-	buf_len := 16777215
-	buf := make([]byte, buf_len)
-	conn.Write(requestPacket.Data)
-	sendtime := time.Now()
-	_, err = conn.Read(buf)
-	recvtime := time.Now()
-	ping := int64(recvtime.Sub(sendtime) / time.Millisecond)
-	if err != nil {
-		return models.Packet{Id: packetId}, grokstaterrors.ServerDown
-	} else {
-		responsePacket = models.Packet{Data: bytes.TrimRight(buf, "\x00"), Id: packetId, Ping: ping}
-		if len(responsePacket.Data) == 0 {
-			err = grokstaterrors.ServerDown
-		}
-	}
-
-	return responsePacket, err
-}
-
-func ParseIPAddr(ipString string, defaultPort string) map[string]string {
+var ParseIPAddr = func(ipString string, defaultPort string) map[string]string {
 	var ipStringMod string
 
 	if len(strings.Split(ipString, "://")) == 1 {
@@ -153,7 +130,7 @@ func ParseIPAddr(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-func RequestWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) ServerResponseStruct {
+var RequestWorkerCore = func(queryProtocol models.ProtocolEntry, remoteIp string) ServerResponseStruct {
 	responseMap := make(map[string]models.Packet)
 	ipMap := ParseIPAddr(remoteIp, queryProtocol.Information["DefaultRequestPort"])
 	hostname := ipMap["host"]
@@ -166,10 +143,13 @@ func RequestWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) Serv
 	} else {
 		defer conn.Close()
 		conn.SetReadDeadline(time.Now().Add(2000 * time.Millisecond))
-		for _, packetId := range queryProtocol.Base.RequestPackets {
+		for _, requestPacketDesc := range queryProtocol.Base.RequestPackets {
+			packetId := requestPacketDesc.Id
+			responsePacketNum := requestPacketDesc.ResponsePacketNum
+
 			requestPacket := queryProtocol.Base.MakeRequestPacketFunc(packetId, queryProtocol.Information)
 			var responseErr error
-			responseMap[packetId], responseErr = GetServerResponse(conn, requestPacket)
+			responseMap[packetId], responseErr = generalhelpers.GetServerResponse(conn, requestPacket, responsePacketNum)
 			if responseErr != nil {
 				responseMap = make(map[string]models.Packet)
 				err = responseErr
@@ -180,7 +160,7 @@ func RequestWorkerCore(queryProtocol models.ProtocolEntry, remoteIp string) Serv
 	return ServerResponseStruct{Hostname: hostname, ResponseMap: responseMap, ResponseErr: err}
 }
 
-func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan chan string, dataChan chan ServerResponseStruct, wg *sync.WaitGroup) {
+var QueryWorker = func(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan chan string, dataChan chan ServerResponseStruct, wg *sync.WaitGroup) {
 	defer func() { wg.Done() }()
 	for {
 		remoteIp, workAvailable := <-remoteIpChan
@@ -197,11 +177,14 @@ func QueryWorker(workerId int, queryProtocol models.ProtocolEntry, remoteIpChan 
 	}
 }
 
-func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string]models.Packet) models.ServerEntry {
+var ParserWorkerCore = func(queryProtocol models.ProtocolEntry, responseMap map[string]models.Packet) models.ServerEntry {
 	serverEntry, responseParseErr := queryProtocol.Base.ServerResponseParseFunc(responseMap, queryProtocol.Information)
 
 	if responseParseErr != nil {
-		return models.ServerEntry{Status: 500, Error: responseParseErr}
+		emptyEntry := models.MakeServerEntry()
+		emptyEntry.Status = 500
+		emptyEntry.Error = responseParseErr
+		return emptyEntry
 	} else {
 		serverEntry.Status = 200
 		serverEntry.Error = nil
@@ -209,14 +192,14 @@ func ParserWorkerCore(queryProtocol models.ProtocolEntry, responseMap map[string
 	}
 }
 
-func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, fullMasterQuery bool, StdoutEnable bool) (serverHosts []string, output []models.ServerEntry, err error) {
-	output = []models.ServerEntry{}
+var Query = func(workerNum int, selectedProtocol string, protocolCmdMap map[string]models.ProtocolEntry, hosts []string, fullMasterQuery bool, StdoutEnable bool) (serverHosts []string, output []models.ServerEntry, err error) {
+	output = make([]models.ServerEntry, 0)
 	var selectedQueryProtocol string
 	var queryProtocol models.ProtocolEntry
 
 	protocol, p_ok := protocolCmdMap[selectedProtocol]
 	if p_ok == false {
-		return []string{}, []models.ServerEntry{}, grokstaterrors.InvalidProtocol
+		return nil, nil, grokstaterrors.InvalidProtocol
 	}
 
 	if protocol.Base.IsMaster {
@@ -260,7 +243,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		selectedQueryProtocol, q_ok = protocol.Information["MasterOf"]
 		queryProtocol, q_ok = protocolCmdMap[selectedQueryProtocol]
 		if q_ok == false {
-			return []string{}, []models.ServerEntry{}, grokstaterrors.InvalidMasterOf
+			return nil, nil, grokstaterrors.InvalidMasterOf
 		}
 	} else {
 		queryProtocol = protocol
@@ -295,7 +278,7 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 	close(dataChan)
 
 	responseMsgLen := 0
-	responseLen := int64(len(dataChan))
+	responseLen := len(dataChan)
 	responseN := 0
 	for response := range dataChan {
 		responseMsgLen = util.PrintReplace(StdoutEnable, fmt.Sprintf("Parsing: %d / %d", responseN+1, responseLen), responseMsgLen)
@@ -305,7 +288,9 @@ func Query(workerNum int, selectedProtocol string, protocolCmdMap map[string]mod
 		if responseErr == nil {
 			serverEntry = ParserWorkerCore(queryProtocol, response.ResponseMap)
 		} else {
-			serverEntry = models.ServerEntry{Status: 503, Error: responseErr}
+			serverEntry = models.MakeServerEntry()
+			serverEntry.Status = 503
+			serverEntry.Error = responseErr
 		}
 		serverEntry.Host = response.Hostname
 		serverEntry.Protocol = queryProtocol.Id
@@ -349,9 +334,7 @@ func main() {
 	if jsonFlags.QueryPoolSize == -1 {
 		queryPoolSize = DEFAULT_QUERY_POOL_SIZE
 	} else {
-		queryClamp := sort.IntSlice([]int{MIN_QUERY_POOL_SIZE, jsonFlags.QueryPoolSize, MAX_QUERY_POOL_SIZE})
-		queryClamp.Sort()
-		queryPoolSize = int(queryClamp[1])
+		queryPoolSize = util.Clamp(jsonFlags.QueryPoolSize, MIN_QUERY_POOL_SIZE, MAX_QUERY_POOL_SIZE)
 	}
 
 	if customConfigPath == "" {

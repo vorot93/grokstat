@@ -12,14 +12,17 @@ import (
 )
 
 func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
-	playerArray := make([]models.PlayerEntry, 0, 0)
+	playerArray := make([]models.PlayerEntry, 0)
 	for _, playerByteEntry := range playerByteArray {
 		byteEntrySplit := bytes.Split(playerByteEntry, []byte(" "))
 		if len(byteEntrySplit) < 3 {
 			continue
 		}
 		ping, _ := strconv.ParseInt(string(byteEntrySplit[1]), 10, 64)
-		playerEntry := models.PlayerEntry{Name: strings.Trim(string(bytes.Join(byteEntrySplit[2:], []byte(" "))), `"`), Ping: ping, Info: map[string]string{"Score": string(byteEntrySplit[0])}}
+		playerEntry := models.MakePlayerEntry()
+		playerEntry.Name = strings.Trim(string(bytes.Join(byteEntrySplit[2:], []byte(" "))), `"`)
+		playerEntry.Ping = ping
+		playerEntry.Info["Score"] = string(byteEntrySplit[0])
 		playerArray = append(playerArray, playerEntry)
 	}
 	return playerArray, nil
@@ -55,7 +58,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
 	responsePacket, rpm_ok := responsePacketMap["status"]
 	if !rpm_ok {
-		return models.ServerEntry{}, grokstaterrors.NoStatusResponse
+		return models.MakeServerEntry(), grokstaterrors.NoStatusResponse
 	}
 	packetPing := responsePacket.Ping
 	response := responsePacket.Data
@@ -65,10 +68,8 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 	splitterBody := []byte{0xa}
 	splitterRules := []byte{0x5c}
 
-	entry := models.ServerEntry{Ping: packetPing}
-
 	if bytes.Equal(response[:len(responsePrelude)], responsePrelude) != true {
-		return models.ServerEntry{}, grokstaterrors.InvalidResponsePrelude
+		return models.MakeServerEntry(), grokstaterrors.InvalidResponsePrelude
 	}
 
 	responseBody := bytes.Trim(response[len(responsePrelude):], string(splitterBody))
@@ -89,16 +90,20 @@ func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo m
 
 	players, playerErr := parsePlayerstring(playerByteArray)
 	if playerErr != nil {
-		return models.ServerEntry{}, playerErr
+		return models.MakeServerEntry(), playerErr
 	}
-	entry.Players = players
-	entry.NumClients = int64(len(players))
 
 	rules, ruleErr := parseRulestring(ruleByteArraySplit)
 	if ruleErr != nil {
-		return models.ServerEntry{}, ruleErr
+		return models.MakeServerEntry(), ruleErr
 	}
+
+	entry := models.MakeServerEntry()
+	entry.Ping = packetPing
+	entry.Players = players
+	entry.NumClients = int64(len(players))
 	entry.Rules = rules
+
 	serverNameRule, serverNameRuleOk := protocolInfo["ServerNameRule"]
 	if serverNameRuleOk {
 		serverName, _ := rules[serverNameRule]

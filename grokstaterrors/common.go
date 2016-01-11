@@ -8,6 +8,8 @@ var (
 	NoDefaultConfig          = errors.New("Default config file not found.")
 	ErrorLoadingCustomConfig = errors.New("Error loading custom config file.")
 
+	IPv6NotSupported = errors.New("IPv6 is not supported yet.")
+
 	NoProtocol = errors.New("Please specify the protocol.")
 	NoHosts    = errors.New("Please specify the hosts to query.")
 
@@ -16,13 +18,16 @@ var (
 
 	ServerDown = errors.New("Server down.")
 
+	MalformedPacket = errors.New("Malformed packet.")
+
 	InvalidResponsePrelude = errors.New("Invalid response prelude.")
 	InvalidResponseLength  = errors.New("Invalid response length.")
 
 	InvalidServerEntryInMasterResponse = errors.New("Invalid server entry in the master server response.")
 
-	NoInfoResponse   = errors.New("No info response.")
-	NoStatusResponse = errors.New("No status response.")
+	NoInfoResponse    = errors.New("No info response.")
+	NoServersResponse = errors.New("No servers response.")
+	NoStatusResponse  = errors.New("No status response.")
 
 	InvalidPlayerString       = errors.New("Invalid player string.")
 	InvalidPlayerStringLength = errors.New("Invalid player string length.")
