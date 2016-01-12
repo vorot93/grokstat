@@ -5,6 +5,26 @@ GrokStat accepts input data as JSON via stdin. The result is displayed in JSON f
 
 The server query is concurrent, with `query-pool-size` setting for customization - more workers means faster yet more CPU intensive query.
 
+## Protocols
+M stands for master server support. S stands for individual game server query support.
+
+### Supported
+- **M** **S** | Quake-derived games:
+ - Quake II
+ - Quake III
+ - Xonotic
+ - OpenArena
+ - Warsow
+ - Unvanquished
+ - Soldiers of Fortune 2
+- **M** **S** | OpenTTD
+- **M** **S** | Teeworlds
+
+### Planned
+- Steam / Source
+- TeamSpeak 3
+- Mumble
+
 ## Get it
 ### Dependencies
 	go get -u github.com/BurntSushi/toml github.com/jteeuwen/go-bindata/...
@@ -14,7 +34,7 @@ The server query is concurrent, with `query-pool-size` setting for customization
     bin/grokstat
 
 ## Example
-    echo '{"protocol": "q3m", "hosts": ["master3.idsoftware.com"], "show-protocols": false, "query-pool-size": 100}' | bin/grokstat
+    echo '{"protocol": "q3m", "hosts": ["master3.idsoftware.com"]}' | bin/grokstat
 
 ## License
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License version 3, as published by the Free Software Foundation.
