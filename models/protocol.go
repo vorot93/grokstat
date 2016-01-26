@@ -3,13 +3,11 @@ package models
 type ProtocolEntryInfo map[string]string
 
 type ProtocolEntryBase struct {
-	IsMaster                bool                                                            `json:"is_master"`
-	MakeRequestPacketFunc   func(string, ProtocolEntryInfo) Packet                          `json:"-"`
-	RequestPackets          []RequestPacket                                                 `json:"-"`
-	MasterResponseParseFunc func(map[string]Packet, ProtocolEntryInfo) ([]string, error)    `json:"-"`
-	ServerResponseParseFunc func(map[string]Packet, ProtocolEntryInfo) (ServerEntry, error) `json:"-"`
-	HttpProtocol            string                                                          `json:"http_protocol"`
-	ResponseType            string                                                          `json:"response_type"`
+	MakePayloadFunc func(Packet, ProtocolEntryInfo) Packet                                                                            `json:"-"`
+	RequestPackets  []RequestPacket                                                                                                   `json:"-"`
+	HandlerFunc     func(Packet, map[string]ProtocolEntry, chan<- ConsoleMsg, chan<- HostProtocolIdPair, chan<- ServerEntry) []Packet `json:"-"`
+	HttpProtocol    string                                                                                                            `json:"http_protocol"`
+	ResponseType    string                                                                                                            `json:"response_type"`
 }
 
 type RequestPacket struct {
@@ -33,4 +31,13 @@ func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
 	entry := ProtocolEntry{Base: entryTemplate.Base, Information: entryInformation}
 
 	return entry
+}
+
+func MakeServerProtocolMapping() map[string]string {
+	return make(map[string]string)
+}
+
+type HostProtocolIdPair struct {
+	RemoteAddr string
+	ProtocolId string
 }

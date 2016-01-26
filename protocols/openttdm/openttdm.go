@@ -14,11 +14,15 @@ const (
 	SLT_IPV6 = iota
 )
 
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
-	responsePacket, rOk := responsePacketMap["servers4"]
-	if !rOk {
-		return nil, grokstaterrors.NoServersResponse
-	}
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "servers4"}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server list"}, Information: models.ProtocolEntryInfo{"Name": "OpenTTD Master", "DefaultRequestPort": "3978", "ProtocolVer": string(byte(2)), "IPType": string(byte(0)), "RequestPreludeTemplate": "\x05\x00\x06{{.ProtocolVer}}{{.IPType}}"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.MasterReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
+
+func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
 	response := responsePacket.Data
 	buf := bytes.NewBuffer(response)
 

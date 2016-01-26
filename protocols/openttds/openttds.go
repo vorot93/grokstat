@@ -8,21 +8,25 @@ import (
 
 	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
+	"github.com/grokstat/grokstat/protocols/helpers"
 	"github.com/grokstat/grokstat/util"
 )
 
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (serverEntry models.ServerEntry, err error) {
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "info"}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server info"}, Information: models.ProtocolEntryInfo{"Name": "OpenTTD Server", "PreludeStarter": "", "PreludeFinisher": "\x00\x00", "RequestPreludeTemplate": "{{.PreludeStarter}}\x03{{.PreludeFinisher}}", "DefaultRequestPort": "3979"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.SimpleReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
+
+func parsePacket(infoPacket models.Packet, protocolInfo models.ProtocolEntryInfo) (serverEntry models.ServerEntry, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			serverEntry = models.MakeServerEntry()
 			err = grokstaterrors.MalformedPacket
 		}
 	}()
-
-	infoPacket, infoPacketOk := responsePacketMap["info"]
-	if !infoPacketOk {
-		return models.MakeServerEntry(), grokstaterrors.NoInfoResponse
-	}
 
 	infoData := bytes.NewBuffer(infoPacket.Data[3:])
 

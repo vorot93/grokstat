@@ -29,6 +29,23 @@ func RemoveDuplicates(ListA []string) []string {
 	return ListB
 }
 
+func CheckError(err error) {
+	if err != nil {
+		fmt.Printf("Error: %s\n", err.Error())
+		os.Exit(0)
+	}
+}
+
+func ByteLEToInt64(byteArray []byte) int64 {
+	var result int64
+	j := uint(0)
+	for i := 0; i < len(byteArray); i++ {
+		result += int64(byteArray[i]) << j
+		j += 8
+	}
+	return result
+}
+
 func ConvertByteArray32to8(byteArray []byte) []byte {
 	newByteArray := make([]byte, len(byteArray)*2)
 	i := 0

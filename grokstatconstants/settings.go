@@ -1,4 +1,4 @@
-package main
+package grokstatconstants
 
 const (
 	VERSION                 = "0.1"

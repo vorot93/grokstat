@@ -8,8 +8,17 @@ import (
 
 	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
+	"github.com/grokstat/grokstat/protocols/helpers"
 	"github.com/grokstat/grokstat/util"
 )
+
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "info"}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server info"}, Information: models.ProtocolEntryInfo{"Name": "Teeworlds Server", "PreludeStarter": "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF", "PreludeFinisher": "\x00", "RequestPreludeTemplate": "{{.PreludeStarter}}gie3{{.PreludeFinisher}}", "ResponsePreludeTemplate": "{{.PreludeStarter}}inf3", "DefaultRequestPort": "8305"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.SimpleReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
 
 func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
 	if math.Mod(float64(len(playerByteArray)), float64(5)) != 0.0 {
@@ -55,11 +64,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 }
 
 // Parses the response from Quake III Arena server
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
-	responsePacket, rpm_ok := responsePacketMap["info"]
-	if !rpm_ok {
-		return models.MakeServerEntry(), grokstaterrors.NoInfoResponse
-	}
+func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
 	packetPing := responsePacket.Ping
 	response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]

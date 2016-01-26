@@ -3,7 +3,7 @@ Retrieves information about game servers. Inspired by [QStat](https://github.com
 
 GrokStat accepts input data as JSON via stdin. The result is displayed in JSON form as well. In order to run a simple query you need to specify protocol and array of hosts to check. Please refer to the example below for more information.
 
-The server query is concurrent, with `query-pool-size` setting for customization - more workers means faster yet more CPU intensive query.
+The server query is asynchronous, done via inbuilt UDP server.
 
 ## Protocols
 M stands for master server support. S stands for individual game server query support.
@@ -19,9 +19,9 @@ M stands for master server support. S stands for individual game server query su
  - Soldiers of Fortune 2
 - **M** **S** | OpenTTD
 - **M** **S** | Teeworlds
+- **M** **S** | Steam / SourceQuery
 
 ### Planned
-- Steam / Source
 - TeamSpeak 3
 - Mumble
 

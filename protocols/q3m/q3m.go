@@ -10,12 +10,16 @@ import (
 	"github.com/grokstat/grokstat/util"
 )
 
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "servers"}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server list"}, Information: models.ProtocolEntryInfo{"Name": "Quake III Arena Master", "SplitterUsed": "true", "PreludeStarter": "\xFF\xFF\xFF\xFF", "RequestQueryParams": "empty full", "RequestPreludeTemplate": "{{.PreludeStarter}}getservers {{.Version}} {{.RequestQueryParams}}\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}getserversResponse", "Version": "68", "DefaultRequestPort": "27950"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.MasterReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
+
 // Parses the response from Quake III Arena master server.
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
-	responsePacket, rOk := responsePacketMap["servers"]
-	if !rOk {
-		return nil, grokstaterrors.NoServersResponse
-	}
+func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
 	response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
 	responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))

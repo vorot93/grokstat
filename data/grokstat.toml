@@ -106,3 +106,13 @@ MasterOf = "openttds"
 [[Protocols]]
 Id = "openttds"
 Template = "OPENTTDS"
+
+[[Protocols]]
+Id = "steam"
+Template = "STEAM"
+[Protocols.Overrides]
+MasterOf = "a2s"
+
+[[Protocols]]
+Id = "a2s"
+Template = "A2S"

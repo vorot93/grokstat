@@ -29,6 +29,8 @@ var (
 	NoServersResponse = errors.New("No servers response.")
 	NoStatusResponse  = errors.New("No status response.")
 
+	InvalidServerHeader = errors.New("Invalid server header.")
+
 	InvalidPlayerString       = errors.New("Invalid player string.")
 	InvalidPlayerStringLength = errors.New("Invalid player string length.")
 

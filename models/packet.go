@@ -1,7 +1,11 @@
 package models
 
 type Packet struct {
-	Id   string
-	Data []byte
-	Ping int64
+	Id         string
+	RemoteAddr string
+	ProtocolId string
+	Protocol   ProtocolEntry
+	Data       []byte
+	Ping       int64
+	Timestamp  int64
 }

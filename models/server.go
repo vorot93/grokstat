@@ -23,6 +23,7 @@ type ServerEntry struct {
 	Terrain    string            `json:"terrain"`
 	NumClients int64             `json:"numclients"`
 	MaxClients int64             `json:"maxclients"`
+	NumBots    int64             `json:"numbots"`
 	Secure     bool              `json:"secure"`
 	Ping       int64             `json:"ping"`
 	Players    []PlayerEntry     `json:"players"`

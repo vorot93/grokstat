@@ -5,11 +5,21 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
+	"github.com/grokstat/grokstat/protocols/helpers"
 	"github.com/grokstat/grokstat/util"
 )
+
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "status", ResponsePacketNum: 1}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server info"}, Information: models.ProtocolEntryInfo{"Name": "Quake III Arena", "PreludeStarter": "\xFF\xFF\xFF\xFF", "Challenge": "GrokStat_" + string(time.Now().Unix()), "RequestPreludeTemplate": "{{.PreludeStarter}}getstatus {{.Challenge}}\n", "ResponsePreludeTemplate": "{{.PreludeStarter}}statusResponse", "ServerNameRule": "sv_hostname", "NeedPassRule": "g_needpass", "TerrainRule": "mapname", "ModNameRule": "game", "GameTypeRule": "g_gametype", "MaxClientsRule": "sv_maxclients", "SecureRule": "sv_punkbuster", "Version": "68", "DefaultRequestPort": "27950"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.SimpleReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
 
 func parsePlayerstring(playerByteArray [][]byte) ([]models.PlayerEntry, error) {
 	playerArray := make([]models.PlayerEntry, 0)
@@ -55,11 +65,7 @@ func parseRulestring(rulestring [][]byte) (map[string]string, error) {
 }
 
 // Parses the response from Quake III Arena server
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
-	responsePacket, rpm_ok := responsePacketMap["status"]
-	if !rpm_ok {
-		return models.MakeServerEntry(), grokstaterrors.NoStatusResponse
-	}
+func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntryInfo) (models.ServerEntry, error) {
 	packetPing := responsePacket.Ping
 	response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]

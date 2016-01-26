@@ -6,8 +6,17 @@ import (
 
 	"github.com/grokstat/grokstat/grokstaterrors"
 	"github.com/grokstat/grokstat/models"
+	"github.com/grokstat/grokstat/protocols/helpers"
 	"github.com/grokstat/grokstat/util"
 )
+
+var (
+	ProtocolTemplate = models.ProtocolEntry{Base: models.ProtocolEntryBase{MakePayloadFunc: helpers.MakePayload, RequestPackets: []models.RequestPacket{models.RequestPacket{Id: "servers"}}, HandlerFunc: Handler, HttpProtocol: "udp", ResponseType: "Server list"}, Information: models.ProtocolEntryInfo{"Name": "Teeworlds Master", "RequestPreludeStarter": "\x20\x00\x00\x00\x00\x00\xFF\xFF\xFF\xFF", "RequestPreludeTemplate": "{{.RequestPreludeStarter}}req2", "ResponsePreludeStarter": "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF", "ResponsePreludeTemplate": "{{.ResponsePreludeStarter}}lis2", "DefaultRequestPort": "8300"}}
+)
+
+func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+	return helpers.MasterReceiveHandler(parsePacket, packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+}
 
 func parseMasterServerEntry(entryRaw []byte) (string, error) {
 	if len(entryRaw) != 8 {
@@ -38,8 +47,7 @@ func parseMasterServerEntry(entryRaw []byte) (string, error) {
 }
 
 // Parses the response from Teeworlds master server.
-func ParseResponseMap(responsePacketMap map[string]models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
-	responsePacket := responsePacketMap["servers"]
+func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntryInfo) ([]string, error) {
 	response := responsePacket.Data
 	responsePreludeTemplate, _ := protocolInfo["ResponsePreludeTemplate"]
 	responsePrelude := []byte(util.ParseTemplate(responsePreludeTemplate, protocolInfo))

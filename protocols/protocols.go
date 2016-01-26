@@ -2,7 +2,14 @@ package protocols
 
 import (
 	"github.com/grokstat/grokstat/models"
-	"github.com/grokstat/grokstat/protocols/protocoltemplates"
+	"github.com/grokstat/grokstat/protocols/a2s"
+	"github.com/grokstat/grokstat/protocols/openttdm"
+	"github.com/grokstat/grokstat/protocols/openttds"
+	"github.com/grokstat/grokstat/protocols/q3m"
+	"github.com/grokstat/grokstat/protocols/q3s"
+	"github.com/grokstat/grokstat/protocols/steam"
+	"github.com/grokstat/grokstat/protocols/teeworldsm"
+	"github.com/grokstat/grokstat/protocols/teeworldss"
 	"github.com/imdario/mergo"
 )
 
@@ -10,12 +17,14 @@ import (
 func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntry {
 	templates := make(map[string]models.ProtocolEntry)
 	infoBase := models.ProtocolEntryInfo{`x20`: "\x20", `xFF`: "\xFF"}
-	templates["Q3M"] = protocoltemplates.Q3Mtemplate
-	templates["Q3S"] = protocoltemplates.Q3Stemplate
-	templates["TEEWORLDSM"] = protocoltemplates.TEEWORLDSMtemplate
-	templates["TEEWORLDSS"] = protocoltemplates.TEEWORLDSStemplate
-	templates["OPENTTDM"] = protocoltemplates.OPENTTDMtemplate
-	templates["OPENTTDS"] = protocoltemplates.OPENTTDStemplate
+	templates["Q3M"] = q3m.ProtocolTemplate
+	templates["Q3S"] = q3s.ProtocolTemplate
+	templates["TEEWORLDSM"] = teeworldsm.ProtocolTemplate
+	templates["TEEWORLDSS"] = teeworldss.ProtocolTemplate
+	templates["OPENTTDM"] = openttdm.ProtocolTemplate
+	templates["OPENTTDS"] = openttds.ProtocolTemplate
+	templates["STEAM"] = steam.ProtocolTemplate
+	templates["A2S"] = a2s.ProtocolTemplate
 
 	for k, _ := range templates {
 		entry := templates[k]
@@ -39,6 +48,7 @@ func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntr
 			protocolEntry.Information[k] = v
 		}
 		protocolEntry.Id = entryId
+		protocolEntry.Information["Id"] = entryId
 
 		protocolMap[entryId] = protocolEntry
 	}
