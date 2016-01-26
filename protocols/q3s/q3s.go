@@ -154,5 +154,13 @@ func parsePacket(responsePacket models.Packet, protocolInfo models.ProtocolEntry
 		}
 	}
 
+	numBotsRule, numBotsRuleOk := protocolInfo["NumBotsRule"]
+	if numBotsRuleOk {
+		numBots, numBotsOk := rules[numBotsRule]
+		if numBotsOk {
+			entry.NumBots, _ = strconv.ParseInt(strings.TrimSpace(numBots), 10, 64)
+		}
+	}
+
 	return entry, nil
 }
