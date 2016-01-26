@@ -40,9 +40,18 @@ Id = "xonoticm"
 Template = "Q3M"
 [Protocols.Overrides]
 Name = "Xonotic Master"
-MasterOf = "q3s"
+MasterOf = "xonotics"
 RequestPreludeTemplate = "{{.PreludeStarter}}getservers Xonotic {{.Version}} empty full"
 Version = "3"
+
+[[Protocols]]
+Id = "xonotics"
+Template = "Q3S"
+[Protocols.Overrides]
+Name = "Xonotic server"
+ServerNameRule = "hostname"
+ModNameRule = "modname"
+NumBotsRule = "bots"
 
 [[Protocols]]
 Id = "etm"
