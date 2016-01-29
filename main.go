@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/imdario/mergo"
 
 	"github.com/grokstat/grokstat/bindata"
 	"github.com/grokstat/grokstat/grokstatconstants"
@@ -186,7 +187,26 @@ func Query(hosts []models.HostProtocolIdPair, protocolMap map[string]models.Prot
 	go func() {
 		for {
 			serverEntry := <-serverEntryChan
-			serverDataMap[serverEntry.Host] = serverEntry
+			hostname := serverEntry.Host
+
+			oldEntry, exists := serverDataMap[hostname]
+			if !exists {
+				serverDataMap[hostname] = serverEntry
+			} else {
+				mergedEntry := oldEntry
+				mergedRules := map[string]string{}
+
+				for k, v := range mergedEntry.Rules {
+					mergedRules[k] = v
+				}
+
+				mergo.Merge(&mergedEntry, serverEntry)
+				mergo.Merge(&mergedRules, serverEntry.Rules)
+
+				mergedEntry.Rules = mergedRules
+
+				serverDataMap[hostname] = mergedEntry
+			}
 		}
 	}()
 
