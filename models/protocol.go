@@ -3,11 +3,11 @@ package models
 type ProtocolEntryInfo map[string]string
 
 type ProtocolEntryBase struct {
-	MakePayloadFunc func(Packet, ProtocolEntryInfo) Packet                                                                            `json:"-"`
-	RequestPackets  []RequestPacket                                                                                                   `json:"-"`
-	HandlerFunc     func(Packet, map[string]ProtocolEntry, chan<- ConsoleMsg, chan<- HostProtocolIdPair, chan<- ServerEntry) []Packet `json:"-"`
-	HttpProtocol    string                                                                                                            `json:"http_protocol"`
-	ResponseType    string                                                                                                            `json:"response_type"`
+	MakePayloadFunc func(Packet, ProtocolEntryInfo) Packet                                                                      `json:"-"`
+	RequestPackets  []RequestPacket                                                                                             `json:"-"`
+	HandlerFunc     func(Packet, ProtocolCollection, chan<- ConsoleMsg, chan<- HostProtocolIdPair, chan<- ServerEntry) []Packet `json:"-"`
+	HttpProtocol    string                                                                                                      `json:"http_protocol"`
+	ResponseType    string                                                                                                      `json:"response_type"`
 }
 
 type RequestPacket struct {
@@ -31,6 +31,72 @@ func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
 	entry := ProtocolEntry{Base: entryTemplate.Base, Information: entryInformation}
 
 	return entry
+}
+
+type ProtocolCollection struct {
+	datasem chan struct{}
+	data    []ProtocolEntry
+}
+
+func (c ProtocolCollection) getIndex(id string) (ProtocolEntry, int) {
+	data := c.data
+
+	searchfunc := func(i int) bool { return data[i].Id == id }
+
+	foundIndex := len(data)
+	for i := 0; i < len(data); i++ {
+		if searchfunc(i) == true {
+			foundIndex = i
+		}
+	}
+
+	if foundIndex == len(data) {
+		return ProtocolEntry{}, -1
+	} else {
+		return data[foundIndex], foundIndex
+	}
+}
+
+func (c ProtocolCollection) FindById(id string) (ProtocolEntry, bool) {
+	var exists bool
+	entry, i := c.getIndex(id)
+	if i == -1 {
+		exists = false
+	} else {
+		exists = true
+	}
+
+	return entry, exists
+}
+
+func (c ProtocolCollection) All() []ProtocolEntry {
+	return c.data
+}
+
+func (c *ProtocolCollection) AddEntry(entry ProtocolEntry) {
+	<-c.datasem
+	c.data = append(c.data, entry)
+	c.datasem <- struct{}{}
+}
+
+func (c *ProtocolCollection) DeleteEntry(id string) (ProtocolEntry, bool) {
+	_, i := c.getIndex(id)
+
+	if i != -1 {
+		<-c.datasem
+		deletedEntry := c.data[i]
+		c.data[i], c.data = c.data[len(c.data)-1], c.data[:len(c.data)-1]
+		c.datasem <- struct{}{}
+		return deletedEntry, true
+	} else {
+		return ProtocolEntry{}, false
+	}
+}
+
+func MakeProtocolCollection() ProtocolCollection {
+	c := ProtocolCollection{data: []ProtocolEntry{}, datasem: make(chan struct{}, 1)}
+	c.datasem <- struct{}{}
+	return c
 }
 
 func MakeServerProtocolMapping() map[string]string {

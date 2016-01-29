@@ -92,14 +92,9 @@ func CleanupMessageChan(messageChan chan models.ConsoleMsg, endChan <-chan struc
 	<-endChan
 }
 
-var PrintProtocols = func(messageChan chan models.ConsoleMsg, protocolCmdMap map[string]models.ProtocolEntry, flags InputData) {
-	var outputMapProtocols []models.ProtocolEntryInfo
-	for _, v := range protocolCmdMap {
-		outputMapProtocols = append(outputMapProtocols, v.Information)
-	}
-
+var PrintProtocols = func(messageChan chan models.ConsoleMsg, protocolCollection models.ProtocolCollection, flags InputData) {
 	output := make(map[string]interface{})
-	output["protocols"] = outputMapProtocols
+	output["protocols"] = protocolCollection.All()
 
 	PrintJsonResponse(messageChan, output, nil, flags)
 }
@@ -147,24 +142,24 @@ func identifyPacketProtocol(packet models.Packet) (string, bool) {
 	return "STEAM", true
 }
 
-func Query(hosts []models.HostProtocolIdPair, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, debugLvl int) (serverHosts []string, output []models.ServerEntry, err error) {
+func Query(hosts []models.HostProtocolIdPair, protocolCollection models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, debugLvl int) (serverHosts []string, output []models.ServerEntry, err error) {
 	serverHosts = []string{}
 	output = []models.ServerEntry{}
 
 	// This is for easier server identification.
-	protocolMapping := models.MakeServerProtocolMapping()
+	serverProtocolMapping := models.MakeServerProtocolMapping()
 	protocolMappingInChan := make(chan models.HostProtocolIdPair)
 
 	go func() {
 		for {
 			mappingEntry := <-protocolMappingInChan
-			protocolMapping[mappingEntry.RemoteAddr] = mappingEntry.ProtocolId
+			serverProtocolMapping[mappingEntry.RemoteAddr] = mappingEntry.ProtocolId
 		}
 	}()
 	//
 
 	getProtocolOfServer := func(remoteAddr string) (string, bool) {
-		protocolName, pOk := protocolMapping[remoteAddr]
+		protocolName, pOk := serverProtocolMapping[remoteAddr]
 		return protocolName, pOk
 	}
 
@@ -223,14 +218,13 @@ func Query(hosts []models.HostProtocolIdPair, protocolMap map[string]models.Prot
 			}
 		}
 		if protocolName != "" {
-			protocolEntry, pEOk := protocolMap[protocolName]
-			if pEOk {
-				packet.Protocol = protocolEntry
+			protocolEntry, protocolExists := protocolCollection.FindById(protocolName)
+			if protocolExists {
 				packet.ProtocolId = protocolName
 				handlerFunc := protocolEntry.Base.HandlerFunc
 
 				if handlerFunc != nil {
-					sendPackets = handlerFunc(packet, protocolMap, messageChan, protocolMappingInChan, serverEntryChan)
+					sendPackets = handlerFunc(packet, protocolCollection, messageChan, protocolMappingInChan, serverEntryChan)
 				}
 			}
 		}
@@ -242,8 +236,8 @@ func Query(hosts []models.HostProtocolIdPair, protocolMap map[string]models.Prot
 	for _, hostpair := range hosts {
 		hostport := strings.Split(hostpair.RemoteAddr, ":")
 		protocolId := hostpair.ProtocolId
-		protocol, sOk := protocolMap[protocolId]
-		if sOk {
+		protocol, protocolExists := protocolCollection.FindById(protocolId)
+		if protocolExists {
 			host := hostport[0]
 			var port string
 			if len(hostport) < 2 {
@@ -255,7 +249,7 @@ func Query(hosts []models.HostProtocolIdPair, protocolMap map[string]models.Prot
 			if rErr == nil {
 				addrFinal := strings.Join([]string{ipAddr.String(), port}, ":")
 
-				reqPackets := helpers.MakeSendPackets(models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protocolMap)
+				reqPackets := helpers.MakeSendPackets(models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protocolCollection)
 				protocolMappingInChan <- models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}
 
 				for _, reqPacket := range reqPackets {
@@ -335,10 +329,10 @@ func main() {
 		}
 	}
 
-	protocolCmdMap := protocols.MakeProtocolMap(configInstance.Protocols)
+	protocolCollection := protocols.LoadProtocolCollection(configInstance.Protocols)
 
 	if showProtocols {
-		PrintProtocols(messageChan, protocolCmdMap, jsonFlags)
+		PrintProtocols(messageChan, protocolCollection, jsonFlags)
 		CleanupMessageChan(messageChan, messageEndChan)
 		return
 	}
@@ -360,7 +354,7 @@ func main() {
 		return
 	}
 
-	serverList, serverData, err := Query(hosts, protocolCmdMap, messageChan, debugLvl)
+	serverList, serverData, err := Query(hosts, protocolCollection, messageChan, debugLvl)
 
 	if err != nil {
 		PrintError(messageChan, err, jsonFlags)

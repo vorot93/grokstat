@@ -30,10 +30,14 @@ func MakePayload(packet models.Packet, protocolEntryInfo models.ProtocolEntryInf
 	return packet
 }
 
-func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+func Handler(packet models.Packet, protocolCollection models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
 	sendPackets = make([]models.Packet, 0)
 
-	protocol := packet.Protocol
+	protocolId := packet.ProtocolId
+	protocol, protocolExists := protocolCollection.FindById(protocolId)
+	if !protocolExists {
+		return sendPackets
+	}
 	protocolInfo := protocol.Information
 	remoteIp := packet.RemoteAddr
 
@@ -87,7 +91,7 @@ func Handler(packet models.Packet, protocolMap map[string]models.ProtocolEntry, 
 		}
 
 		for _, pair := range pairList {
-			sendPackets = append(sendPackets, helpers.MakeSendPackets(pair, protocolMap)...)
+			sendPackets = append(sendPackets, helpers.MakeSendPackets(pair, protocolCollection)...)
 		}
 
 		masterServerEntry := models.ServerEntry{Protocol: packet.ProtocolId, Host: packet.RemoteAddr, Name: "Steam Master Server"}

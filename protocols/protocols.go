@@ -14,7 +14,7 @@ import (
 )
 
 // Returns a map with protocols initialized
-func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntry {
+func LoadProtocolCollection(configData []ProtocolConfig) models.ProtocolCollection {
 	templates := make(map[string]models.ProtocolEntry)
 	infoBase := models.ProtocolEntryInfo{`x20`: "\x20", `xFF`: "\xFF"}
 	templates["Q3M"] = q3m.ProtocolTemplate
@@ -53,5 +53,11 @@ func MakeProtocolMap(configData []ProtocolConfig) map[string]models.ProtocolEntr
 		protocolMap[entryId] = protocolEntry
 	}
 
-	return protocolMap
+	protocolCollection := models.MakeProtocolCollection()
+
+	for _, entry := range protocolMap {
+		protocolCollection.AddEntry(entry)
+	}
+
+	return protocolCollection
 }
