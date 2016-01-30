@@ -36,7 +36,67 @@ func receiveHandler(packet models.Packet, sendRequestChan chan<- models.Packet, 
 	}
 }
 
-func AsyncUDPServer(messageChan chan<- models.ConsoleMsg, sendChan, sendRequestChan, receiveChan chan models.Packet, endChan chan struct{}, parseHandler func(models.Packet) []models.Packet, timeOut time.Duration) {
+func udpReceiveLoop(endChan chan struct{}, conn *net.UDPConn, messageChan chan<- models.ConsoleMsg, receiveChan chan models.Packet, awakeChan chan struct{}) {
+	for {
+		select {
+		case <-endChan:
+			return
+		default:
+			packet, err := readUDP(conn)
+			awakeChan <- struct{}{}
+			if err == nil {
+				messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: fmt.Sprintf("Read %d bytes from %s", len(packet.Data), packet.RemoteAddr)}
+				receiveChan <- packet
+			}
+		}
+	}
+
+}
+
+func receiveHandlerLoop(endChan chan struct{}, receiveChan chan models.Packet, sendRequestChan chan<- models.Packet, receiveHandler func(models.Packet, chan<- models.Packet, func(models.Packet) []models.Packet), parseHandler func(models.Packet) []models.Packet, awakeChan chan<- struct{}) {
+	for {
+		select {
+		case dataAvailable := <-receiveChan:
+			awakeChan <- struct{}{}
+			go receiveHandler(dataAvailable, sendRequestChan, parseHandler)
+		case <-endChan:
+			return
+		}
+	}
+}
+
+func udpSendLoop(endChan chan struct{}, conn *net.UDPConn, messageChan chan<- models.ConsoleMsg, sendChan chan models.Packet, awakeChan chan struct{}) {
+	for {
+		select {
+		case dataSendPayload := <-sendChan:
+			messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: fmt.Sprintf("Writing %d bytes to %s", len(dataSendPayload.Data), dataSendPayload.RemoteAddr)}
+			awakeChan <- struct{}{}
+			go writeUDP(conn, dataSendPayload)
+		case <-endChan:
+			return
+		}
+	}
+}
+
+func keepAliveLoop(awakeChan chan struct{}, timeOut time.Duration, endChans ...chan struct{}) {
+	<-awakeChan
+	for {
+		if timeOut > 0 {
+			select {
+			case <-awakeChan:
+			case <-time.After(timeOut):
+				for _, endChannel := range endChans {
+					endChannel <- struct{}{}
+				}
+				return
+			}
+		} else {
+			<-awakeChan
+		}
+	}
+}
+
+func AsyncUDPServer(initChan, endChan chan<- struct{}, messageChan chan<- models.ConsoleMsg, sendChan, receiveChan chan models.Packet, parseHandler func(models.Packet) []models.Packet, timeOut time.Duration) {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		Port: 0,
 		IP:   net.IPv4zero,
@@ -45,72 +105,22 @@ func AsyncUDPServer(messageChan chan<- models.ConsoleMsg, sendChan, sendRequestC
 		panic(err)
 	}
 	defer conn.Close()
-	messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_MINOR, Message: fmt.Sprintf("Started UDP server at %s", conn.LocalAddr().String())}
+	messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_MINOR, Message: fmt.Sprintf("Starting UDP server at %s", conn.LocalAddr().String())}
 
 	active := make(chan struct{}, 9999)
 
-	endServer := make(chan struct{})
-	endReceive := make(chan struct{})
-	endRead := make(chan struct{})
-	endWrite := make(chan struct{})
+	endReceive := make(chan struct{}, 1)
+	endServer := make(chan struct{}, 1)
+	endRead := make(chan struct{}, 1)
+	endWrite := make(chan struct{}, 1)
 
-	go func() {
-		for {
-			select {
-			case <-endReceive:
-				return
-			default:
-				packet, err := readUDP(conn)
-				if err == nil {
-					messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: fmt.Sprintf("Read %d bytes from %s", len(packet.Data), packet.RemoteAddr)}
-					receiveChan <- packet
-				}
-			}
-		}
-	}()
+	go udpReceiveLoop(endReceive, conn, messageChan, receiveChan, active)
+	go receiveHandlerLoop(endRead, receiveChan, sendChan, receiveHandler, parseHandler, active)
+	go udpSendLoop(endWrite, conn, messageChan, sendChan, active)
 
-	go func() {
-		for {
-			select {
-			case dataAvailable := <-receiveChan:
-				active <- struct{}{}
-				go receiveHandler(dataAvailable, sendRequestChan, parseHandler)
-			case <-endRead:
-				return
-			}
-		}
-	}()
+	go keepAliveLoop(active, timeOut, endReceive, endRead, endWrite, endServer)
 
-	go func() {
-		for {
-			select {
-			case dataSendPayload := <-sendChan:
-				messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: fmt.Sprintf("Writing %d bytes to %s", len(dataSendPayload.Data), dataSendPayload.RemoteAddr)}
-				active <- struct{}{}
-				go writeUDP(conn, dataSendPayload)
-			case <-endWrite:
-				return
-			}
-		}
-	}()
-
-	go func() {
-		<-active
-		for {
-			if timeOut > 0 {
-				select {
-				case <-active:
-				case <-time.After(timeOut):
-					endRead <- struct{}{}
-					endWrite <- struct{}{}
-					endServer <- struct{}{}
-					return
-				}
-			} else {
-				<-active
-			}
-		}
-	}()
+	initChan <- struct{}{}
 	<-endServer
 	messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_MINOR, Message: fmt.Sprintf("Stopping server.")}
 	endChan <- struct{}{}

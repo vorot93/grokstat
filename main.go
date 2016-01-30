@@ -165,17 +165,10 @@ func Query(hosts []models.HostProtocolIdPair, protocolCollection models.Protocol
 
 	serverEntryChan := make(chan models.ServerEntry, 9999)
 	sendPacketChan := make(chan models.Packet, 9999)
-	sendRequestChan := make(chan models.Packet, 9999)
 	receivePacketChan := make(chan models.Packet, 9999)
 
-	endChan := make(chan struct{})
-
-	go func() {
-		for {
-			packet := <-sendRequestChan
-			sendPacketChan <- packet
-		}
-	}()
+	serverInitChan := make(chan struct{})
+	serverStopChan := make(chan struct{})
 
 	serverDataMap := make(map[string]models.ServerEntry)
 
@@ -205,7 +198,7 @@ func Query(hosts []models.HostProtocolIdPair, protocolCollection models.Protocol
 		}
 	}()
 
-	handlerWrapper := func(packet models.Packet) (sendPackets []models.Packet) {
+	parseHandlerWrapper := func(packet models.Packet) (sendPackets []models.Packet) {
 		sendPackets = make([]models.Packet, 0)
 		var protocolName string
 		protocolMappingName, pOk := getProtocolOfServer(packet.RemoteAddr)
@@ -261,8 +254,9 @@ func Query(hosts []models.HostProtocolIdPair, protocolCollection models.Protocol
 		}
 	}
 
-	go network.AsyncUDPServer(messageChan, sendPacketChan, sendRequestChan, receivePacketChan, endChan, handlerWrapper, 5*time.Second)
-	<-endChan
+	go network.AsyncUDPServer(serverInitChan, serverStopChan, messageChan, sendPacketChan, receivePacketChan, parseHandlerWrapper, 5*time.Second)
+	<-serverInitChan
+	<-serverStopChan
 
 	for _, entry := range serverDataMap {
 		serverHosts = append(serverHosts, entry.Host)
