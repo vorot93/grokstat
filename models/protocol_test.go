@@ -9,7 +9,7 @@ import (
 
 func TestProtocolCollectionFindById(t *testing.T) {
 	var err error
-	s1 := MakeProtocolCollection()
+	s1 := MakeSharedProtocolCollection()
 	s1.AddEntry(ProtocolEntry{Id: "q3s"})
 	s1.AddEntry(ProtocolEntry{Id: "teeworldss"})
 	expA, expB := ProtocolEntry{Id: "q3s"}, true

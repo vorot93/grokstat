@@ -64,6 +64,53 @@ type JsonResponse struct {
 	Output  interface{} `json:"output"`
 }
 
+type PacketErrorPair struct {
+	Packet models.Packet
+	Error  error
+}
+
+func MakePacketErrorPair(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection) (packErrPairs []PacketErrorPair) {
+	packErrPairs = []PacketErrorPair{}
+
+	for _, hostpair := range hosts {
+		var hostpackets = []models.Packet{}
+		var err error = nil
+
+		hostport := strings.Split(hostpair.RemoteAddr, ":")
+		protocolId := hostpair.ProtocolId
+		protocol, protocolExists := protColl.FindById(protocolId)
+		if protocolExists {
+			host := hostport[0]
+			var port string
+			if len(hostport) < 2 {
+				port, _ = protocol.Information["DefaultRequestPort"]
+			} else {
+				port = hostport[1]
+			}
+			ipAddr, rErr := net.ResolveIPAddr("ip4", host)
+			if rErr == nil {
+				addrFinal := strings.Join([]string{ipAddr.String(), port}, ":")
+
+				reqPackets := helpers.MakeSendPackets(models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protColl)
+
+				for _, reqPacket := range reqPackets {
+					hostpackets = append(hostpackets, reqPacket)
+				}
+			} else {
+				err = rErr
+			}
+		} else {
+			err = grokstaterrors.InvalidProtocol
+		}
+
+		for _, packetFinal := range hostpackets {
+			packErrPairs = append(packErrPairs, PacketErrorPair{Packet: packetFinal, Error: err})
+		}
+	}
+
+	return packErrPairs
+}
+
 // Forms a JSON string out of Grokstat output.
 var FormJsonResponse = func(output interface{}, err error, flags InputData) (string, error) {
 	result := JsonResponse{Version: grokstatconstants.VERSION, Flags: flags}
@@ -92,9 +139,9 @@ func CleanupMessageChan(messageChan chan models.ConsoleMsg, endChan <-chan struc
 	<-endChan
 }
 
-var PrintProtocols = func(messageChan chan models.ConsoleMsg, protocolCollection models.ProtocolCollection, flags InputData) {
+var PrintProtocols = func(messageChan chan models.ConsoleMsg, protColl models.ProtocolCollection, flags InputData) {
 	output := make(map[string]interface{})
-	output["protocols"] = protocolCollection.All()
+	output["protocols"] = protColl.All()
 
 	PrintJsonResponse(messageChan, output, nil, flags)
 }
@@ -142,7 +189,7 @@ func identifyPacketProtocol(packet models.Packet) (string, bool) {
 	return "STEAM", true
 }
 
-func Query(hosts []models.HostProtocolIdPair, protocolCollection models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, debugLvl int) (serverHosts []string, output []models.ServerEntry, err error) {
+func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, debugLvl int) (serverHosts []string, output []models.ServerEntry, err error) {
 	serverHosts = []string{}
 	output = []models.ServerEntry{}
 
@@ -211,13 +258,13 @@ func Query(hosts []models.HostProtocolIdPair, protocolCollection models.Protocol
 			}
 		}
 		if protocolName != "" {
-			protocolEntry, protocolExists := protocolCollection.FindById(protocolName)
+			protocolEntry, protocolExists := protColl.FindById(protocolName)
 			if protocolExists {
 				packet.ProtocolId = protocolName
 				handlerFunc := protocolEntry.Base.HandlerFunc
 
 				if handlerFunc != nil {
-					sendPackets = handlerFunc(packet, protocolCollection, messageChan, protocolMappingInChan, serverEntryChan)
+					sendPackets = handlerFunc(packet, protColl, messageChan, protocolMappingInChan, serverEntryChan)
 				}
 			}
 		}
@@ -226,31 +273,15 @@ func Query(hosts []models.HostProtocolIdPair, protocolCollection models.Protocol
 
 	}
 
-	for _, hostpair := range hosts {
-		hostport := strings.Split(hostpair.RemoteAddr, ":")
-		protocolId := hostpair.ProtocolId
-		protocol, protocolExists := protocolCollection.FindById(protocolId)
-		if protocolExists {
-			host := hostport[0]
-			var port string
-			if len(hostport) < 2 {
-				port, _ = protocol.Information["DefaultRequestPort"]
-			} else {
-				port = hostport[1]
-			}
-			ipAddr, rErr := net.ResolveIPAddr("ip4", host)
-			if rErr == nil {
-				addrFinal := strings.Join([]string{ipAddr.String(), port}, ":")
+	for _, packPair := range MakePacketErrorPair(hosts, protColl) {
+		packet := packPair.Packet
+		err := packPair.Error
 
-				reqPackets := helpers.MakeSendPackets(models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protocolCollection)
-				protocolMappingInChan <- models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}
-
-				for _, reqPacket := range reqPackets {
-					sendPacketChan <- reqPacket
-				}
-			} else {
-				messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: rErr.Error()}
-			}
+		if err == nil {
+			protocolMappingInChan <- models.HostProtocolIdPair{RemoteAddr: packet.RemoteAddr, ProtocolId: packet.ProtocolId}
+			sendPacketChan <- packet
+		} else {
+			messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: err.Error()}
 		}
 	}
 
@@ -323,10 +354,10 @@ func main() {
 		}
 	}
 
-	protocolCollection := protocols.LoadProtocolCollection(configInstance.Protocols)
+	protColl := protocols.LoadProtocolCollection(configInstance.Protocols)
 
 	if showProtocols {
-		PrintProtocols(messageChan, protocolCollection, jsonFlags)
+		PrintProtocols(messageChan, protColl, jsonFlags)
 		CleanupMessageChan(messageChan, messageEndChan)
 		return
 	}
@@ -348,7 +379,7 @@ func main() {
 		return
 	}
 
-	serverList, serverData, err := Query(hosts, protocolCollection, messageChan, debugLvl)
+	serverList, serverData, err := Query(hosts, protColl, messageChan, debugLvl)
 
 	if err != nil {
 		PrintError(messageChan, err, jsonFlags)

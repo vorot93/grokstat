@@ -33,12 +33,19 @@ func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
 	return entry
 }
 
-type ProtocolCollection struct {
+type ProtocolCollection interface {
+	FindById(string) (ProtocolEntry, bool)
+	All() []ProtocolEntry
+	AddEntry(ProtocolEntry)
+	DeleteEntry(string) (ProtocolEntry, bool)
+}
+
+type sharedProtocolCollection struct {
 	datasem chan struct{}
 	data    []ProtocolEntry
 }
 
-func (c ProtocolCollection) getIndex(id string) (ProtocolEntry, int) {
+func (c sharedProtocolCollection) getIndex(id string) (ProtocolEntry, int) {
 	data := c.data
 
 	searchfunc := func(i int) bool { return data[i].Id == id }
@@ -57,7 +64,7 @@ func (c ProtocolCollection) getIndex(id string) (ProtocolEntry, int) {
 	}
 }
 
-func (c ProtocolCollection) FindById(id string) (ProtocolEntry, bool) {
+func (c sharedProtocolCollection) FindById(id string) (ProtocolEntry, bool) {
 	var exists bool
 	entry, i := c.getIndex(id)
 	if i == -1 {
@@ -69,17 +76,17 @@ func (c ProtocolCollection) FindById(id string) (ProtocolEntry, bool) {
 	return entry, exists
 }
 
-func (c ProtocolCollection) All() []ProtocolEntry {
+func (c sharedProtocolCollection) All() []ProtocolEntry {
 	return c.data
 }
 
-func (c *ProtocolCollection) AddEntry(entry ProtocolEntry) {
+func (c *sharedProtocolCollection) AddEntry(entry ProtocolEntry) {
 	<-c.datasem
 	c.data = append(c.data, entry)
 	c.datasem <- struct{}{}
 }
 
-func (c *ProtocolCollection) DeleteEntry(id string) (ProtocolEntry, bool) {
+func (c *sharedProtocolCollection) DeleteEntry(id string) (ProtocolEntry, bool) {
 	_, i := c.getIndex(id)
 
 	if i != -1 {
@@ -93,8 +100,10 @@ func (c *ProtocolCollection) DeleteEntry(id string) (ProtocolEntry, bool) {
 	}
 }
 
-func MakeProtocolCollection() ProtocolCollection {
-	c := ProtocolCollection{data: []ProtocolEntry{}, datasem: make(chan struct{}, 1)}
+func MakeSharedProtocolCollection() *sharedProtocolCollection {
+	c := new(sharedProtocolCollection)
+	c.data = []ProtocolEntry{}
+	c.datasem = make(chan struct{}, 1)
 	c.datasem <- struct{}{}
 	return c
 }

@@ -53,11 +53,11 @@ func LoadProtocolCollection(configData []ProtocolConfig) models.ProtocolCollecti
 		protocolMap[entryId] = protocolEntry
 	}
 
-	protocolCollection := models.MakeProtocolCollection()
+	protColl := models.MakeSharedProtocolCollection()
 
 	for _, entry := range protocolMap {
-		protocolCollection.AddEntry(entry)
+		protColl.AddEntry(entry)
 	}
 
-	return protocolCollection
+	return protColl
 }

@@ -21,11 +21,11 @@ func MakePayload(packet models.Packet, protocolInfo models.ProtocolEntryInfo) mo
 	return packet
 }
 
-func SimpleReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo) (models.ServerEntry, error), packet models.Packet, protocolCollection models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+func SimpleReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo) (models.ServerEntry, error), packet models.Packet, protColl models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
 	sendPackets = []models.Packet{}
 
 	protocolId := packet.ProtocolId
-	protocol, protocolExists := protocolCollection.FindById(protocolId)
+	protocol, protocolExists := protColl.FindById(protocolId)
 	if !protocolExists {
 		return sendPackets
 	}
@@ -48,11 +48,11 @@ func SimpleReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo
 	return sendPackets
 }
 
-func MasterReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo) ([]string, error), packet models.Packet, protocolCollection models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
+func MasterReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo) ([]string, error), packet models.Packet, protColl models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, protocolMappingInChan chan<- models.HostProtocolIdPair, serverEntryChan chan<- models.ServerEntry) (sendPackets []models.Packet) {
 	sendPackets = []models.Packet{}
 
 	protocolId := packet.ProtocolId
-	protocol, protocolExists := protocolCollection.FindById(protocolId)
+	protocol, protocolExists := protColl.FindById(protocolId)
 	if !protocolExists {
 		return sendPackets
 	}
@@ -71,7 +71,7 @@ func MasterReceiveHandler(parseFunc func(models.Packet, models.ProtocolEntryInfo
 	for _, ipAddr := range servers {
 		pair := models.HostProtocolIdPair{RemoteAddr: ipAddr, ProtocolId: masterOf}
 		protocolMappingInChan <- pair
-		sendPackets = append(sendPackets, MakeSendPackets(pair, protocolCollection)...)
+		sendPackets = append(sendPackets, MakeSendPackets(pair, protColl)...)
 	}
 
 	masterServerEntry := models.MakeServerEntry()
