@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"os"
@@ -179,12 +178,6 @@ var ParseIPAddr = func(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-func parseResponse(packet models.Packet) []models.Packet {
-	log.Println(packet.Data)
-
-	return []models.Packet{}
-}
-
 func identifyPacketProtocol(packet models.Packet) (string, bool) {
 	return "STEAM", true
 }
@@ -297,6 +290,24 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 	return serverHosts, output, err
 }
 
+func conditionalPrint(message models.ConsoleMsg, outputLvl int) {
+	if message.Type <= outputLvl {
+		fmt.Println(message.Message)
+	}
+}
+
+func outputLoop(messageChan <-chan models.ConsoleMsg, messageEndChan chan<- struct{}, outputLvl int) {
+	for {
+		message, mOk := <-messageChan
+		if mOk {
+			conditionalPrint(message, outputLvl)
+		} else {
+			messageEndChan <- struct{}{}
+			return
+		}
+	}
+}
+
 func main() {
 	var configInstance ConfigFile
 
@@ -311,19 +322,7 @@ func main() {
 
 	outputLvl := jsonFlags.OutputLvl
 
-	go func() {
-		for {
-			message, mOk := <-messageChan
-			if mOk {
-				if message.Type <= outputLvl {
-					fmt.Println(message.Message)
-				}
-			} else {
-				messageEndChan <- struct{}{}
-				return
-			}
-		}
-	}()
+	go outputLoop(messageChan, messageEndChan, outputLvl)
 
 	if jsonErr != nil {
 		PrintError(messageChan, jsonErr, jsonFlags)
@@ -381,12 +380,12 @@ func main() {
 
 	serverList, serverData, err := Query(hosts, protColl, messageChan, debugLvl)
 
-	if err != nil {
+	if err == nil {
+		PrintJsonResponse(messageChan, map[string]interface{}{"server-list": serverList, "servers": serverData}, err, jsonFlags)
+	} else {
 		PrintError(messageChan, err, jsonFlags)
 		CleanupMessageChan(messageChan, messageEndChan)
 		return
-	} else {
-		PrintJsonResponse(messageChan, map[string]interface{}{"server-list": serverList, "servers": serverData}, err, jsonFlags)
 	}
 
 	CleanupMessageChan(messageChan, messageEndChan)
