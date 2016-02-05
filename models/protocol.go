@@ -22,6 +22,11 @@ type ProtocolEntry struct {
 	Information ProtocolEntryInfo
 }
 
+type HostProtocolIdPair struct {
+	RemoteAddr string
+	ProtocolId string
+}
+
 func MakeProtocolEntry(entryTemplate ProtocolEntry) ProtocolEntry {
 	entryInformation := make(ProtocolEntryInfo, len(entryTemplate.Information))
 	for k, v := range entryTemplate.Information {
@@ -110,9 +115,4 @@ func MakeSharedProtocolCollection() *sharedProtocolCollection {
 
 func MakeServerProtocolMapping() map[string]string {
 	return make(map[string]string)
-}
-
-type HostProtocolIdPair struct {
-	RemoteAddr string
-	ProtocolId string
 }

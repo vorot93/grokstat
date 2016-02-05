@@ -4,8 +4,7 @@ grokstat is a tool for querying game servers for various information: server lis
 The program takes protocol name and remote ip address as arguments, fetches information from the remote server, parses it and outputs back as JSON. As convenience the status and message are also provided.
 
 grokstat uses JSON input instead of command line flags. The JSON input is structured as follows:
-	hosts - array of strings - hosts to query
-	protocol - string - protocol to use
+	hosts - map of string keys and string array values - hosts to query
 	show-protocols - boolean - if true, show protocols and exit
 	output-lvl - int - tune the output from bare JSON to full-fledged debug
 	custom-config-path - path of custom config file to be used
@@ -44,11 +43,14 @@ type ServerResponseStruct struct {
 }
 
 type InputData struct {
-	Hosts            []string `json:"hosts"`
-	Protocol         string   `json:"protocol"`
-	ShowProtocols    bool     `json:"show-protocols"`
-	OutputLvl        int      `json:"output-lvl"`
-	CustomConfigPath string   `json:"custom-config-path"`
+	Hosts            map[string][]string `json:"hosts"`
+	ShowProtocols    bool                `json:"show-protocols"`
+	OutputLvl        int                 `json:"output-lvl"`
+	CustomConfigPath string              `json:"custom-config-path"`
+}
+
+func MakeInputData() InputData {
+	return InputData{Hosts: make(map[string][]string)}
 }
 
 type ConfigFile struct {
@@ -314,7 +316,8 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	text, _ := reader.ReadString('\n')
 
-	jsonFlags := InputData{Hosts: []string{}, Protocol: "", CustomConfigPath: "", ShowProtocols: false, OutputLvl: grokstatconstants.MSG_MAJOR}
+	jsonFlags := MakeInputData()
+	jsonFlags.OutputLvl = grokstatconstants.DEFAULT_OUTPUT_LVL
 	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
 
 	messageChan := make(chan models.ConsoleMsg)
@@ -330,10 +333,9 @@ func main() {
 		return
 	}
 
-	hostList := util.RemoveDuplicates(jsonFlags.Hosts)
+	hostMap := jsonFlags.Hosts
 	showProtocols := jsonFlags.ShowProtocols
 	customConfigPath := jsonFlags.CustomConfigPath
-	selectedProtocol := jsonFlags.Protocol
 	debugLvl := outputLvl
 
 	if customConfigPath == "" {
@@ -361,15 +363,11 @@ func main() {
 		return
 	}
 
-	if selectedProtocol == "" {
-		PrintError(messageChan, grokstaterrors.NoProtocol, jsonFlags)
-		CleanupMessageChan(messageChan, messageEndChan)
-		return
-	}
-
-	hosts := make([]models.HostProtocolIdPair, len(hostList))
-	for i, host := range hostList {
-		hosts[i] = models.HostProtocolIdPair{RemoteAddr: host, ProtocolId: selectedProtocol}
+	hosts := []models.HostProtocolIdPair{}
+	for protocolId, hostList := range hostMap {
+		for _, host := range util.RemoveDuplicates(hostList) {
+			hosts = append(hosts, models.HostProtocolIdPair{RemoteAddr: host, ProtocolId: protocolId})
+		}
 	}
 
 	if len(hosts) == 0 {

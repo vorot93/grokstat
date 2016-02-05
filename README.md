@@ -34,7 +34,10 @@ M stands for master server support. S stands for individual game server query su
     bin/grokstat
 
 ## Example
-    echo '{"protocol": "q3m", "hosts": ["master3.idsoftware.com"]}' | bin/grokstat
+### Query servers
+    echo '{"hosts": {"openttdm": ["master.openttd.org:3978"], "q3m": ["master3.idsoftware.com"]}}' | bin/grokstat
+### Review available protocols
+    echo '{"show-protocols": true}' | bin/grokstat
 
 ## License
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License version 3, as published by the Free Software Foundation.
