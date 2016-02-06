@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -292,9 +293,13 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 	return serverHosts, output, err
 }
 
-func conditionalPrint(message models.ConsoleMsg, outputLvl int) {
+func conditionalPrint(message models.ConsoleMsg, outputLvl int, useLogging bool) {
 	if message.Type <= outputLvl {
-		fmt.Println(message.Message)
+		if useLogging {
+			log.Println(message.Message)
+		} else {
+			fmt.Println(message.Message)
+		}
 	}
 }
 
@@ -302,7 +307,7 @@ func outputLoop(messageChan <-chan models.ConsoleMsg, messageEndChan chan<- stru
 	for {
 		message, mOk := <-messageChan
 		if mOk {
-			conditionalPrint(message, outputLvl)
+			conditionalPrint(message, outputLvl, outputLvl >= grokstatconstants.MSG_DEBUG)
 		} else {
 			messageEndChan <- struct{}{}
 			return
