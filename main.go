@@ -281,7 +281,7 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 		}
 	}
 
-	go network.AsyncUDPServer(serverInitChan, serverStopChan, messageChan, sendPacketChan, receivePacketChan, parseHandlerWrapper, 5*time.Second)
+	go network.AsyncNetworkServer(serverInitChan, serverStopChan, messageChan, sendPacketChan, receivePacketChan, parseHandlerWrapper, 5*time.Second)
 	<-serverInitChan
 	<-serverStopChan
 
