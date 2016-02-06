@@ -20,8 +20,9 @@ var (
 
 	MalformedPacket = errors.New("Malformed packet.")
 
-	InvalidResponsePrelude = errors.New("Invalid response prelude.")
-	InvalidResponseLength  = errors.New("Invalid response length.")
+	InvalidResponsePrelude   = errors.New("Invalid response prelude.")
+	InvalidResponseLength    = errors.New("Invalid response length.")
+	InvalidResponseChallenge = errors.New("Invalid response challenge.")
 
 	InvalidServerEntryInMasterResponse = errors.New("Invalid server entry in the master server response.")
 

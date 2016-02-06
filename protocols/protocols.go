@@ -3,6 +3,7 @@ package protocols
 import (
 	"github.com/grokstat/grokstat/models"
 	"github.com/grokstat/grokstat/protocols/a2s"
+	"github.com/grokstat/grokstat/protocols/mumbles"
 	"github.com/grokstat/grokstat/protocols/openttdm"
 	"github.com/grokstat/grokstat/protocols/openttds"
 	"github.com/grokstat/grokstat/protocols/q3m"
@@ -25,6 +26,7 @@ func LoadProtocolCollection(configData []ProtocolConfig) models.ProtocolCollecti
 	templates["OPENTTDS"] = openttds.ProtocolTemplate
 	templates["STEAM"] = steam.ProtocolTemplate
 	templates["A2S"] = a2s.ProtocolTemplate
+	templates["MUMBLES"] = mumbles.ProtocolTemplate
 
 	for k, _ := range templates {
 		entry := templates[k]

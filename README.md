@@ -20,10 +20,7 @@ M stands for master server support. S stands for individual game server query su
 - **M** **S** | OpenTTD
 - **M** **S** | Teeworlds
 - **M** **S** | Steam / SourceQuery
-
-### Planned
-- TeamSpeak 3
-- Mumble
+- **S** | Mumble
 
 ## Get it
 ### Dependencies
