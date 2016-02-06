@@ -317,13 +317,24 @@ func outputLoop(messageChan <-chan models.ConsoleMsg, messageEndChan chan<- stru
 
 func main() {
 	var configInstance ConfigFile
+	args := os.Args
+	var argJsonText string
+	var jsonText string
 
-	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
+	if len(args) > 1 {
+		argJsonText = args[1]
+	}
+
+	if argJsonText != "" {
+		jsonText = argJsonText
+	} else {
+		reader := bufio.NewReader(os.Stdin)
+		jsonText, _ = reader.ReadString('\n')
+	}
 
 	jsonFlags := MakeInputData()
 	jsonFlags.OutputLvl = grokstatconstants.DEFAULT_OUTPUT_LVL
-	jsonErr := json.Unmarshal([]byte(text), &jsonFlags)
+	jsonErr := json.Unmarshal([]byte(jsonText), &jsonFlags)
 
 	messageChan := make(chan models.ConsoleMsg)
 	messageEndChan := make(chan struct{})
