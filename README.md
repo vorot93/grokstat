@@ -1,4 +1,6 @@
 # GrokStat
+[![Docker Pulls](https://img.shields.io/docker/pulls/grokstat/grokstat.svg)](https://hub.docker.com/r/grokstat/grokstat/)
+
 Retrieves information about game servers. Inspired by [QStat](https://github.com/multiplay/qstat), written in Go. Yet even more simple, extensible and fast.
 
 GrokStat accepts input data as JSON via stdin. The result is displayed in JSON form as well. In order to run a simple query you need to specify protocol and array of hosts to check. Please refer to the example below for more information.
@@ -23,17 +25,39 @@ M stands for master server support. S stands for individual game server query su
 - **S** | Mumble
 
 ## Get it
-### Dependencies
+### Docker (simple)
+GrokStat project ships Docker images containing precompiled GrokStat, runnable out-of-the-box.
+#### Install / update
+    docker pull grokstat/grokstat
+#### Run
+    docker run -it --rm grokstat/grokstat <json-input>
+### Manual
+In addition to using docker you can compile and run manually.
+#### Dependencies
 	go get -u github.com/BurntSushi/toml github.com/jteeuwen/go-bindata/...
-### GrokStat itself
+#### GrokStat itself
 	git clone https://github.com/grokstat/grokstat.git
     cd grokstat && make build
     bin/grokstat
 
 ## Example
 ### Query servers
+	docker run --rm grokstat/grokstat '{"hosts": {"openttdm": ["master.openttd.org:3978"], "q3m": ["master3.idsoftware.com"]}}'
+
+or
+
     echo '{"hosts": {"openttdm": ["master.openttd.org:3978"], "q3m": ["master3.idsoftware.com"]}}' | bin/grokstat
+
+or
+
+	bin/grokstat '{"hosts": {"openttdm": ["master.openttd.org:3978"], "q3m": ["master3.idsoftware.com"]}}'
+
+Always mind the single quotes.
 ### Review available protocols
+    docker run --rm grokstat/grokstat '{"show-protocols": true}'
+
+or
+
     echo '{"show-protocols": true}' | bin/grokstat
 
 ## License
