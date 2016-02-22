@@ -1,4 +1,5 @@
 # GrokStat
+[![Build Status](https://img.shields.io/travis/grokstat/grokstat.svg)](https://travis-ci.org/grokstat/grokstat)
 [![Docker Pulls](https://img.shields.io/docker/pulls/grokstat/grokstat.svg)](https://hub.docker.com/r/grokstat/grokstat/)
 
 Retrieves information about game servers. Inspired by [QStat](https://github.com/multiplay/qstat), written in Go. Yet even more simple, extensible and fast.

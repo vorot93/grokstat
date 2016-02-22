@@ -1,0 +1,22 @@
+sudo: required
+language: go
+go:
+- 1.6
+services:
+- docker
+env:
+  global:
+  - secure: "cJ/MQsBlxWHpXyxGnhg5xm7PQMYWyGxk+hbRz1ujUX1fXjacG3SzTs4i+imdYSZznGi+QfVyxLt2DFAjf7c2rezwoiRogOL4S72uaDRIvOa5IODR4e0SsPGBTYOsoMG8blhxjc4ZnNkSfbHkc/sT9w2VoxhSEuXxnpUGmqstXcnWTf1wlfPQ8X5JG+jnNxg33X+MM8Lm44Gjb9wswJCcU28+0rIRDH3TfENMW6KzPHGsi/7dhgXCfeXGiq7mX2k62AuZUV3BDPUvyVg+sEAOln2/bGWCF2WN3vrGkhyhb/Dj5gKmdgNN7F3FAFgxAxhVSUN/NrRnjmNhKvjk8qY/+CvBuKvGoM/y62ch40CmYkEv4AJ0Hj3ao97S/yaWuZY2P7YxnEiHfCSQZs+mph6ATKL8nvU9eh6CWwK5q/YwFmlmzh93GXjc12n7llLYYyLaDhZlIUxi+Etb027sYubN2Y37xPwwAtgxENUZhsCQPy/jH3hsUF0MFdT7aF5FwLuQQxLtCes0CMYKomlJAsN3vKeq7DlNApvbbBH7gMLmFnsxYk8mfU9SF5Hc/9KgVt2bcGXMGATg0Vq26iGZ72XP1TR0gTpLm1HYUZWmZ/sPzK2ntLX1m6alFsoXk7oWa162mgJgV9ONyVh+imF7V6FEcUClK+TgVfrrJH8/zTsOFhA=" # DOCKER_EMAIL
+  - secure: "WZHILcapJEkiKSdnoGsxElNoGLSgIBy4UYS72RZ2wI5duu6BGMXWIShJLpAMtQ+jbBoJk25DxcFjO/v99pORk3QdkKxi5sAnyFqE1lMti/Iqx0jk+QpGxJh4iL43+Qz9gAgCiCyYLKi1C25mQ928bxk8LCK3TCvjMfBpmxuPqb+pgq7L/mcYsnN9QuAKEttuqGszmv1lSqt8Qtjs3TGFuhd2Yl7fS+6SZsNvS1xU6Y4WWFcxof+CMetHWHZUml3ydXqb75sr4oM4+FicGi5jBV/SxmXyW05/fBanGpX7/JByBGBfLBMUe+dhg4mKObSMv2lgUacculRFTy9Ua5gAGOSR4WIPbPi04CloSIZDM6uWIKOgxJsz56UsSypQ/xDqdqYFwZsua4h70wLxcbiAus9Rkrzz8eJ7gZgZGeWyt4IIGkjfx1/2wpw0qASGZhbum2EedW9V6PZ9q/u6GMohStF16jSGv5sw+nGjxQyBtwXee7RFk8yOtpg3jj8NkrLG8F8An3tq9qPGb60eOBP2Rag6COIRO/TG44nQngWxqtCvH3mKOPeFUZq7JU+lnjx5XtBshEg/p+pDQXbnEIJ/6V4RKb7tYjLJFhYEMDy2bG3XIp2fppetnIZTsymZQejI2Au/r+mOokjC53G6wOnEq36XnjVskM1xqeoHQKIuAgM=" # DOCKER_USER
+  - secure: "h9BGjHFdOWEikWYAN1spjV/DT/RDkhwokpWTN00KbTaZjNcrOjvoGtbvs+Gv6Mix9x2n7VJph1TBQcz6XQ/MtNd6n5mPM4NUJCQBzI/QlxRr2KN+f/ebec49qqCCToO0JAnVn9Dny6pjwteksJ22qMaDfG3g3KHlxOE/t9T+IQhmqhZDawkv4YukMq+4dvRRIiPH5is2LHxaR8143zmEFpmLLJ+R+lgJgW6KHdaf+eG9DOaWdD4vf2XDeLJJbgBVmiBJe3qwei6brcbnM4p2YqfmcQWui+YvRw0n7HEK6CgIw/aWsQ1CXtNaj/01xR4HYfjyH4eS8EBtmNFJBrCwBdrB6EhkHlxnLkIp95+KA39hS/9Od3SGUss6702YNQ/7N10WfjFsHurd2FLYHbbG+pe/OzeDoTDPityIN94dVz8E3jd5rdLmF+ONBkx/mENw5rH5okPBAbQTBc+R4XeKeBqFur/5l3R4D5HHTvFudjNrD6Bi8V9oJrgnRR7qB61T5m7b/IfQoOqs+0tkJDeyRhSMUQBKLqjvok6DBC8V6/ecS1fVfReTRU4Q0pDfYkKQtIJguRP+ilxVrUy2KsRNU0tdpDW/9kdLpFdljWBphtS8Qjq6Jg2Z7UtKNZAvQCN+e4n4MSyz8JE+dRNBka25kWNo7DTvrcNr+jdqFgk1moA=" # DOCKER_PASS
+  - COMMIT=${TRAVIS_COMMIT::8}
+install: make get-deps
+script: make build
+after_success:
+  - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+  - export REPO=grokstat/grokstat
+  - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "latest"; else echo $TRAVIS_BRANCH ; fi`
+  - docker build -f Dockerfile -t $REPO:$COMMIT .
+  - docker tag $REPO:$COMMIT $REPO:$TAG
+  - docker tag $REPO:$COMMIT $REPO:travis-$TRAVIS_BUILD_NUMBER
+  - docker push $REPO
