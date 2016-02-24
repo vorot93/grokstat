@@ -1,4 +1,5 @@
 # GrokStat
+[![Gitter](https://img.shields.io/badge/gitter-%23grokstat%2Fgrokstat-blue.svg)](https://gitter.im/grokstat/grokstat?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://img.shields.io/travis/grokstat/grokstat.svg)](https://travis-ci.org/grokstat/grokstat)
 [![Docker Pulls](https://img.shields.io/docker/pulls/grokstat/grokstat.svg)](https://hub.docker.com/r/grokstat/grokstat/)
 
