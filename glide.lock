@@ -1,0 +1,10 @@
+hash: 87a273547be6dd4da9e898a0aa593cac2ed624b6c348a91659727b83f3dc9d8d
+updated: 2016-06-30T16:23:09.901101493+03:00
+imports:
+- name: github.com/BurntSushi/toml
+  version: f0aeabca5a127c4078abb8c8d64298b147264b55
+- name: github.com/imdario/mergo
+  version: 50d4dbd4eb0e84778abe37cefef140271d96fade
+- name: github.com/skybon/goutil
+  version: dfe316edfe279ed3d64f506d9a43ff06ff0ad192
+devImports: []

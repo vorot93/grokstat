@@ -1,0 +1,5 @@
+package: grokstat
+import:
+- package: github.com/BurntSushi/toml
+- package: github.com/imdario/mergo
+- package: github.com/skybon/goutil

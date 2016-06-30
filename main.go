@@ -11,8 +11,6 @@ grokstat uses JSON input instead of command line flags. The JSON input is struct
 */
 package main
 
-//go:generate go-bindata -o "bindata/bindata.go" -pkg "bindata" "data/..."
-
 import (
 	"bufio"
 	"encoding/json"
@@ -26,28 +24,19 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/imdario/mergo"
-
-	"github.com/grokstat/grokstat/bindata"
-	"github.com/grokstat/grokstat/grokstatconstants"
-	"github.com/grokstat/grokstat/grokstaterrors"
-	"github.com/grokstat/grokstat/models"
-	"github.com/grokstat/grokstat/network"
-	"github.com/grokstat/grokstat/protocols"
-	"github.com/grokstat/grokstat/protocols/helpers"
-	"github.com/grokstat/grokstat/util"
 )
 
 type ServerResponseStruct struct {
 	Hostname    string
-	ResponseMap map[string]models.Packet
+	ResponseMap map[string]Packet
 	ResponseErr error
 }
 
 type InputData struct {
-	Hosts            map[string][]string `json:"hosts"`
-	ShowProtocols    bool                `json:"show-protocols"`
-	OutputLvl        int                 `json:"output-lvl"`
-	CustomConfigPath string              `json:"custom-config-path"`
+	Hosts         map[string][]string `json:"hosts"`
+	ShowProtocols bool                `json:"show-protocols"`
+	OutputLvl     int                 `json:"output-lvl"`
+	ConfigPath    string              `json:"config-path"`
 }
 
 func MakeInputData() InputData {
@@ -55,7 +44,7 @@ func MakeInputData() InputData {
 }
 
 type ConfigFile struct {
-	Protocols []protocols.ProtocolConfig `toml:"Protocols"`
+	Protocols []ProtocolConfig `toml:"Protocols"`
 }
 
 type JsonResponse struct {
@@ -67,20 +56,20 @@ type JsonResponse struct {
 }
 
 type PacketErrorPair struct {
-	Packet models.Packet
+	Packet Packet
 	Error  error
 }
 
-func MakePacketErrorPair(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection) (packErrPairs []PacketErrorPair) {
+func MakePacketErrorPair(hosts []HostProtocolIdPair, protColl *ProtocolCollection) (packErrPairs []PacketErrorPair) {
 	packErrPairs = []PacketErrorPair{}
 
 	for _, hostpair := range hosts {
-		var hostpackets = []models.Packet{}
-		var err error = nil
+		var hostpackets = []Packet{}
+		var err error
 
 		hostport := strings.Split(hostpair.RemoteAddr, ":")
 		protocolId := hostpair.ProtocolId
-		protocol, protocolExists := protColl.FindById(protocolId)
+		protocol, protocolExists := protColl.Get(protocolId)
 		if protocolExists {
 			host := hostport[0]
 			var port string
@@ -93,7 +82,7 @@ func MakePacketErrorPair(hosts []models.HostProtocolIdPair, protColl models.Prot
 			if rErr == nil {
 				addrFinal := strings.Join([]string{ipAddr.String(), port}, ":")
 
-				reqPackets := helpers.MakeSendPackets(models.HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protColl)
+				reqPackets := MakeSendPackets(HostProtocolIdPair{RemoteAddr: addrFinal, ProtocolId: protocolId}, protColl)
 
 				for _, reqPacket := range reqPackets {
 					hostpackets = append(hostpackets, reqPacket)
@@ -102,7 +91,7 @@ func MakePacketErrorPair(hosts []models.HostProtocolIdPair, protColl models.Prot
 				err = rErr
 			}
 		} else {
-			err = grokstaterrors.InvalidProtocol
+			err = InvalidProtocol
 		}
 
 		for _, packetFinal := range hostpackets {
@@ -113,9 +102,9 @@ func MakePacketErrorPair(hosts []models.HostProtocolIdPair, protColl models.Prot
 	return packErrPairs
 }
 
-// Forms a JSON string out of Grokstat output.
-var FormJsonResponse = func(output interface{}, err error, flags InputData) (string, error) {
-	result := JsonResponse{Version: grokstatconstants.VERSION, Flags: flags}
+// FormJSONResponse creates a JSON string out of Grokstat output.
+var FormJSONResponse = func(output interface{}, err error, flags InputData) (string, error) {
+	result := JsonResponse{Version: VERSION, Flags: flags}
 
 	if err != nil {
 		result.Output = make(map[string]interface{})
@@ -124,7 +113,7 @@ var FormJsonResponse = func(output interface{}, err error, flags InputData) (str
 	} else {
 		result.Output = output
 		result.Status = 200
-		result.Message = grokstaterrors.OK.Error()
+		result.Message = OK.Error()
 	}
 
 	jsonOut, jsonErr := json.Marshal(result)
@@ -136,25 +125,25 @@ var FormJsonResponse = func(output interface{}, err error, flags InputData) (str
 	return string(jsonOut), jsonErr
 }
 
-func CleanupMessageChan(messageChan chan models.ConsoleMsg, endChan <-chan struct{}) {
+func CleanupMessageChan(messageChan chan ConsoleMsg, endChan <-chan struct{}) {
 	close(messageChan)
 	<-endChan
 }
 
-var PrintProtocols = func(messageChan chan models.ConsoleMsg, protColl models.ProtocolCollection, flags InputData) {
+var PrintProtocols = func(messageChan chan ConsoleMsg, protColl *ProtocolCollection, flags InputData) {
 	output := make(map[string]interface{})
-	output["protocols"] = protColl.All()
+	output["protocols"] = protColl.Map()
 
 	PrintJsonResponse(messageChan, output, nil, flags)
 }
 
-var PrintError = func(messageChan chan models.ConsoleMsg, err error, flags InputData) {
+var PrintError = func(messageChan chan ConsoleMsg, err error, flags InputData) {
 	PrintJsonResponse(messageChan, nil, err, flags)
 }
 
-var PrintJsonResponse = func(messageChan chan models.ConsoleMsg, output interface{}, err error, flags InputData) {
-	jsonOut, _ := FormJsonResponse(output, err, flags)
-	messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_MAJOR, Message: jsonOut}
+var PrintJsonResponse = func(messageChan chan ConsoleMsg, output interface{}, err error, flags InputData) {
+	jsonOut, _ := FormJSONResponse(output, err, flags)
+	messageChan <- ConsoleMsg{Type: MSG_MAJOR, Message: jsonOut}
 }
 
 var DefaultConfigBinPath = "data/grokstat.toml"
@@ -181,17 +170,17 @@ var ParseIPAddr = func(ipString string, defaultPort string) map[string]string {
 	return result
 }
 
-func identifyPacketProtocol(packet models.Packet) (string, bool) {
+func identifyPacketProtocol(packet Packet) (string, bool) {
 	return "STEAM", true
 }
 
-func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection, messageChan chan<- models.ConsoleMsg, debugLvl int) (serverHosts []string, output []models.ServerEntry, err error) {
+func Query(hosts []HostProtocolIdPair, protColl *ProtocolCollection, messageChan chan<- ConsoleMsg, debugLvl int) (serverHosts []string, output []ServerEntry, err error) {
 	serverHosts = []string{}
-	output = []models.ServerEntry{}
+	output = []ServerEntry{}
 
 	// This is for easier server identification.
-	serverProtocolMapping := models.MakeServerProtocolMapping()
-	protocolMappingInChan := make(chan models.HostProtocolIdPair)
+	var serverProtocolMapping = map[string]string{}
+	var protocolMappingInChan = make(chan HostProtocolIdPair)
 
 	go func() {
 		for {
@@ -206,14 +195,14 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 		return protocolName, pOk
 	}
 
-	serverEntryChan := make(chan models.ServerEntry, 9999)
-	sendPacketChan := make(chan models.Packet, 9999)
-	receivePacketChan := make(chan models.Packet, 9999)
+	serverEntryChan := make(chan ServerEntry, 9999)
+	sendPacketChan := make(chan Packet, 9999)
+	receivePacketChan := make(chan Packet, 9999)
 
 	serverInitChan := make(chan struct{})
 	serverStopChan := make(chan struct{})
 
-	serverDataMap := make(map[string]models.ServerEntry)
+	serverDataMap := make(map[string]ServerEntry)
 
 	go func() {
 		for {
@@ -241,8 +230,8 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 		}
 	}()
 
-	parseHandlerWrapper := func(packet models.Packet) (sendPackets []models.Packet) {
-		sendPackets = make([]models.Packet, 0)
+	parseHandlerWrapper := func(packet Packet) (sendPackets []Packet) {
+		sendPackets = make([]Packet, 0)
 		var protocolName string
 		protocolMappingName, pOk := getProtocolOfServer(packet.RemoteAddr)
 		if pOk {
@@ -254,7 +243,7 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 			}
 		}
 		if protocolName != "" {
-			protocolEntry, protocolExists := protColl.FindById(protocolName)
+			protocolEntry, protocolExists := protColl.Get(protocolName)
 			if protocolExists {
 				packet.ProtocolId = protocolName
 				handlerFunc := protocolEntry.Base.HandlerFunc
@@ -274,14 +263,14 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 		err := packPair.Error
 
 		if err == nil {
-			protocolMappingInChan <- models.HostProtocolIdPair{RemoteAddr: packet.RemoteAddr, ProtocolId: packet.ProtocolId}
+			protocolMappingInChan <- HostProtocolIdPair{RemoteAddr: packet.RemoteAddr, ProtocolId: packet.ProtocolId}
 			sendPacketChan <- packet
 		} else {
-			messageChan <- models.ConsoleMsg{Type: grokstatconstants.MSG_DEBUG, Message: err.Error()}
+			messageChan <- ConsoleMsg{Type: MSG_DEBUG, Message: err.Error()}
 		}
 	}
 
-	go network.AsyncNetworkServer(serverInitChan, serverStopChan, messageChan, sendPacketChan, receivePacketChan, parseHandlerWrapper, 5*time.Second)
+	go AsyncNetworkServer(serverInitChan, serverStopChan, messageChan, sendPacketChan, receivePacketChan, parseHandlerWrapper, 5*time.Second)
 	<-serverInitChan
 	<-serverStopChan
 
@@ -293,7 +282,7 @@ func Query(hosts []models.HostProtocolIdPair, protColl models.ProtocolCollection
 	return serverHosts, output, err
 }
 
-func conditionalPrint(message models.ConsoleMsg, outputLvl int, useLogging bool) {
+func conditionalPrint(message ConsoleMsg, outputLvl int, useLogging bool) {
 	if message.Type <= outputLvl {
 		if useLogging {
 			log.Println(message.Message)
@@ -303,11 +292,11 @@ func conditionalPrint(message models.ConsoleMsg, outputLvl int, useLogging bool)
 	}
 }
 
-func outputLoop(messageChan <-chan models.ConsoleMsg, messageEndChan chan<- struct{}, outputLvl int) {
+func outputLoop(messageChan <-chan ConsoleMsg, messageEndChan chan<- struct{}, outputLvl int) {
 	for {
 		message, mOk := <-messageChan
 		if mOk {
-			conditionalPrint(message, outputLvl, outputLvl >= grokstatconstants.MSG_DEBUG)
+			conditionalPrint(message, outputLvl, outputLvl >= MSG_DEBUG)
 		} else {
 			messageEndChan <- struct{}{}
 			return
@@ -333,10 +322,10 @@ func main() {
 	}
 
 	jsonFlags := MakeInputData()
-	jsonFlags.OutputLvl = grokstatconstants.DEFAULT_OUTPUT_LVL
+	jsonFlags.OutputLvl = DEFAULT_OUTPUT_LVL
 	jsonErr := json.Unmarshal([]byte(jsonText), &jsonFlags)
 
-	messageChan := make(chan models.ConsoleMsg)
+	messageChan := make(chan ConsoleMsg)
 	messageEndChan := make(chan struct{})
 
 	outputLvl := jsonFlags.OutputLvl
@@ -351,27 +340,23 @@ func main() {
 
 	hostMap := jsonFlags.Hosts
 	showProtocols := jsonFlags.ShowProtocols
-	customConfigPath := jsonFlags.CustomConfigPath
+	configPath := jsonFlags.ConfigPath
 	debugLvl := outputLvl
 
-	if customConfigPath == "" {
-		configBinData, err := bindata.Asset(DefaultConfigBinPath)
-		if err != nil {
-			PrintError(messageChan, grokstaterrors.NoDefaultConfig, jsonFlags)
-			CleanupMessageChan(messageChan, messageEndChan)
-			return
-		}
-		toml.Decode(string(configBinData), &configInstance)
-	} else {
-		_, err := toml.DecodeFile(customConfigPath, &configInstance)
-		if err != nil {
-			PrintError(messageChan, grokstaterrors.ErrorLoadingCustomConfig, jsonFlags)
-			CleanupMessageChan(messageChan, messageEndChan)
-			return
-		}
+	if configPath == "" {
+		PrintError(messageChan, NoConfig, jsonFlags)
+		CleanupMessageChan(messageChan, messageEndChan)
+		return
 	}
 
-	protColl := protocols.LoadProtocolCollection(configInstance.Protocols)
+	_, err := toml.DecodeFile(configPath, &configInstance)
+	if err != nil {
+		PrintError(messageChan, ErrorLoadingConfig, jsonFlags)
+		CleanupMessageChan(messageChan, messageEndChan)
+		return
+	}
+
+	protColl := LoadProtocols(configInstance.Protocols)
 
 	if showProtocols {
 		PrintProtocols(messageChan, protColl, jsonFlags)
@@ -379,15 +364,15 @@ func main() {
 		return
 	}
 
-	hosts := []models.HostProtocolIdPair{}
+	hosts := []HostProtocolIdPair{}
 	for protocolId, hostList := range hostMap {
-		for _, host := range util.RemoveDuplicates(hostList) {
-			hosts = append(hosts, models.HostProtocolIdPair{RemoteAddr: host, ProtocolId: protocolId})
+		for _, host := range RemoveDuplicates(hostList) {
+			hosts = append(hosts, HostProtocolIdPair{RemoteAddr: host, ProtocolId: protocolId})
 		}
 	}
 
 	if len(hosts) == 0 {
-		PrintError(messageChan, grokstaterrors.NoHosts, jsonFlags)
+		PrintError(messageChan, NoHosts, jsonFlags)
 		CleanupMessageChan(messageChan, messageEndChan)
 		return
 	}
