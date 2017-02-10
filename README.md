@@ -1,7 +1,6 @@
 # GrokStat
-[![Gitter](https://img.shields.io/badge/gitter-%23grokstat%2Fgrokstat-blue.svg)](https://gitter.im/grokstat/grokstat?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://img.shields.io/travis/grokstat/grokstat.svg)](https://travis-ci.org/grokstat/grokstat)
-[![Docker Pulls](https://img.shields.io/docker/pulls/grokstat/grokstat.svg)](https://hub.docker.com/r/grokstat/grokstat/)
+[![Build Status](https://img.shields.io/travis/vorot93/grokstat.svg)](https://travis-ci.org/vorot93/grokstat)
+[![Docker Pulls](https://img.shields.io/docker/pulls/vorot93/grokstat.svg)](https://hub.docker.com/r/vorot93/grokstat/)
 
 Retrieves information about game servers. Inspired by [QStat](https://github.com/multiplay/qstat), written in Go. Yet even more simple, extensible and fast.
 
@@ -30,15 +29,15 @@ M stands for master server support. S stands for individual game server query su
 ### Docker (simple)
 GrokStat project ships Docker images containing precompiled GrokStat, runnable out-of-the-box.
 #### Install / update
-    docker pull grokstat/grokstat
+    docker pull vorot93/grokstat
 #### Run
-    docker run -it --rm grokstat/grokstat <json-input>
+    docker run -it --rm vorot93/grokstat <json-input>
 ### Manual
 In addition to using docker you can compile and run manually.
 #### Dependencies
-	go get -u github.com/BurntSushi/toml github.com/jteeuwen/go-bindata/...
+    go get -u github.com/BurntSushi/toml github.com/jteeuwen/go-bindata/...
 #### GrokStat itself
-	git clone https://github.com/grokstat/grokstat.git
+    git clone https://github.com/grokstat/grokstat.git
     cd grokstat && make build
     bin/grokstat
 
